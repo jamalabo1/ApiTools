@@ -46,6 +46,7 @@ namespace ApiTools.Context
         Task<bool> Exist(TModelKeyId id, ContextReadOptions options = default);
         Task<bool> Exist(Expression<Func<TModel, bool>> expression, ContextReadOptions options = default);
         Task<bool> Exist(IEnumerable<Expression<Func<TModel, bool>>> expressions, ContextReadOptions options = default);
+        Task<bool> Exist(IEnumerable<TModelKeyId> expressions, ContextReadOptions options = default);
         IQueryable<TModel> Order(IQueryable<TModel> entities);
         void Detach(TModel entity);
         Task Save();
@@ -54,8 +55,8 @@ namespace ApiTools.Context
     public abstract class Context<TModel, TModelKeyId> : IContext<TModel, TModelKeyId>
         where TModel : ContextEntity<TModelKeyId> where TModelKeyId : new()
     {
+        private static readonly Type ModelKeyIdType = typeof(TModelKeyId);
         private readonly IDbContext _appContext;
-        private readonly Type _type = typeof(TModelKeyId);
 
         protected Context(IDbContext appContext)
         {
@@ -65,7 +66,7 @@ namespace ApiTools.Context
         protected virtual IQueryable<TModel> SetQuery { get; set; }
 
         /// <summary>
-        ///     Adds entities to the set without calling the <c>Save</c> function.
+        ///     Adds entities to the set without calling the <c>Save</c> method.
         /// </summary>
         /// <param name="entities">Entities to be added to the set</param>
         /// <returns></returns>
@@ -75,7 +76,7 @@ namespace ApiTools.Context
         }
 
         /// <summary>
-        ///     Adds single entity to the set without calling the <c>Save</c> function.
+        ///     Adds single entity to the set without calling the <c>Save</c> method.
         /// </summary>
         /// <param name="entity">Entity to be added to the set</param>
         /// <returns></returns>
@@ -85,10 +86,10 @@ namespace ApiTools.Context
         }
 
         /// <summary>
-        ///     Adds the entities to the set and calls the <c>Save</c> function.
+        ///     Adds the entities to the set and calls the <c>Save</c> method.
         /// </summary>
         /// <param name="entities">Entities to be added to the database</param>
-        /// <returns>Entities after calling <c>Save</c> function</returns>
+        /// <returns>Entities after calling <c>Save</c> method</returns>
         public virtual async Task<IEnumerable<TModel>> Create([NoEnumeration] IEnumerable<TModel> entities)
         {
             await CreateWithoutSave(entities);
@@ -97,10 +98,10 @@ namespace ApiTools.Context
         }
 
         /// <summary>
-        ///     Adds single entity to the set and calls the <c>Save</c> function.
+        ///     Adds single entity to the set and calls the <c>Save</c> method.
         /// </summary>
         /// <param name="entity">Single entity to be added to the database</param>
-        /// <returns>The entity after calling the <c>Save</c> function</returns>
+        /// <returns>The entity after calling the <c>Save</c> method</returns>
         public virtual async Task<TModel> Create(TModel entity)
         {
             await _appContext.AddAsync(entity);
@@ -145,15 +146,9 @@ namespace ApiTools.Context
         /// <param name="ids">an <c>IEnumerable</c> of ids of type <c>TModelKeyId</c></param>
         /// <param name="options">Read options</param>
         /// <returns>a query for entities that have an id that exists in the supplied ids.</returns>
-        public virtual IQueryable<TModel> FindByIds(IEnumerable<TModelKeyId> ids, ContextReadOptions options = null)
+        public virtual IQueryable<TModel> FindByIds(IEnumerable<TModelKeyId> ids, ContextReadOptions options)
         {
-            var listIds = ids.ToList();
-
-            if (!_type.IsValueType || _type.IsEnum) return Find(x => listIds.Contains(x.Id), options);
-            {
-                var normalizedIds = listIds.Select(x => x.ToString()).ToList();
-                return Find(x => normalizedIds.Contains(x.Id.ToString()));
-            }
+            return Find(_findByIds(ids, options), options);
         }
 
         public virtual IQueryable<TModel> Find(Expression<Func<TModel, bool>> expression,
@@ -247,7 +242,17 @@ namespace ApiTools.Context
 
         public async Task<bool> Exist(Expression<Func<TModel, bool>> expression, ContextReadOptions options = default)
         {
-            return await AnyAsync(new[] {expression}, options);
+            return await Exist(new[] {expression}, options);
+        }
+
+        public async Task<bool> Exist(IEnumerable<TModelKeyId> ids,
+            ContextReadOptions options = default)
+        {
+            if (options?.AllExist == true)
+            {
+                return await Count(_findByIds(ids, options), options) == ids.LongCount();
+            }
+            return await Exist(_findByIds(ids, options), options);
         }
 
         public async Task<bool> Exist(IEnumerable<Expression<Func<TModel, bool>>> expressions,
@@ -256,6 +261,7 @@ namespace ApiTools.Context
             return await AnyAsync(expressions, options);
         }
 
+
         public virtual IQueryable<TModel> Order(IQueryable<TModel> entities)
         {
             if (entities is IQueryable<DbEntity<TModelKeyId>> dbEntities)
@@ -263,11 +269,27 @@ namespace ApiTools.Context
             return entities;
         }
 
+        private static Expression<Func<TModel, bool>> _findByIds(IEnumerable<TModelKeyId> ids, ContextReadOptions options)
+        {
+            var listIds = ids.ToList();
+            if (!ModelKeyIdType.IsValueType || ModelKeyIdType.IsEnum) return x => listIds.Contains(x.Id);
+            {
+                var normalizedIds = listIds.Select(x => x.ToString()).ToList();
+                return x => normalizedIds.Contains(x.Id.ToString());
+            }
+        }
+
 
         private async Task<bool> AnyAsync(IEnumerable<Expression<Func<TModel, bool>>> expressions,
             ContextReadOptions options = default)
         {
             return await Find(expressions, options).AnyAsync();
+        }
+
+        private async Task<long> Count(Expression<Func<TModel, bool>> expression,
+            ContextReadOptions options = default)
+        {
+            return await Find(expression, options).LongCountAsync();
         }
 
         private IQueryable<TModel> _read(ContextReadOptions options = default)

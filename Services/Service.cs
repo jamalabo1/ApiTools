@@ -115,13 +115,14 @@ namespace ApiTools.Services
         {
             if (_sort == null)
                 throw new MissingFieldException(
-                    "Sort was not supplied from the constructor, this function cannot be called without it.");
+                    "Sort was not supplied from the constructor, this method cannot be called without it.");
 
             var query = await ApplyReadOptions(_context.Find(readOptions), options);
             var response = await _readWithPaging(query);
 
             return new ServiceResponse<PagingServiceResponse<TModel>>
             {
+                Success = true,
                 Response = response,
                 StatusCode = StatusCodes.Status200OK
             };
@@ -138,6 +139,7 @@ namespace ApiTools.Services
 
             return new ServiceResponse<TModel>
             {
+                Success = true,
                 Response = model,
                 StatusCode = StatusCodes.Status200OK
             };
@@ -158,6 +160,7 @@ namespace ApiTools.Services
 
             return new ServiceResponse<IEnumerable<TModel>>
             {
+                Success = true,
                 Response = models,
                 StatusCode = StatusCodes.Status200OK
             };
@@ -249,6 +252,7 @@ namespace ApiTools.Services
         {
             return Task.FromResult(new ServiceResponse
             {
+                Success = true,
                 TriggerSave = false
             });
         }
@@ -336,6 +340,7 @@ namespace ApiTools.Services
 
             return new ServiceResponse<IEnumerable<TModel>>
             {
+                Success = true,
                 Response = entities,
                 StatusCode = StatusCodes.Status201Created
             };
@@ -392,6 +397,7 @@ namespace ApiTools.Services
 
             return new ServiceResponse
             {
+                Success = true,
                 StatusCode = StatusCodes.Status204NoContent
             };
         }

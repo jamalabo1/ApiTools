@@ -77,17 +77,33 @@ namespace ApiTools.Controllers
 
         public IActionResult GenerateResult(ServiceResponse response)
         {
+            if (!response.Success) return GenerateResponseMessages(response.StatusCode, response.Messages);
+            
             return StatusCode(response.StatusCode);
         }
 
         public IActionResult GenerateResult(ServiceResponse<TModel> response)
         {
-            return StatusCode(response.StatusCode, response.Response);
+            if (!response.Success) return GenerateResponseMessages(response.StatusCode, response.Messages);
+
+            return GenerateActionResult(response.StatusCode, response.Response);
         }
 
         public IActionResult GenerateResult(ServiceResponse<PagingServiceResponse<TModel>> response)
         {
-            return StatusCode(response.StatusCode, response.Response);
+            if (!response.Success) return GenerateResponseMessages(response.StatusCode, response.Messages);
+
+            return GenerateActionResult(response.StatusCode, response.Response);
+        }
+
+        protected virtual IActionResult GenerateActionResult(int statusCode, object value)
+        {
+            return StatusCode(statusCode, value);
+        }
+
+        protected virtual IActionResult GenerateResponseMessages(int statusCode, IEnumerable<IServiceResponseMessage> messages)
+        {
+            return StatusCode(statusCode, messages);
         }
 
         public virtual RouteRules CreateResource_Roles()

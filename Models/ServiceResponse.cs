@@ -1,15 +1,30 @@
-﻿namespace ApiTools.Models
+﻿using System.Collections.Generic;
+
+namespace ApiTools.Models
 {
     public class ServiceResponse
     {
         public bool Success = true;
         public bool TriggerSave { get; set; } = true;
         public int StatusCode { get; set; }
+
+        public IEnumerable<IServiceResponseMessage> Messages { get; set; }
+    }
+
+    public interface IServiceResponseMessage
+    {
+        
+    }
+
+    public class ServiceResponseMessage : IServiceResponseMessage
+    {
+        public string Message { get; set; }
+        public string Code { get; set; }
     }
 
     public class ServiceResponse<T> : ServiceResponse
     {
-        public static readonly ServiceResponse<T> Ok = new ServiceResponse<T> {StatusCode = 200};
+        public static readonly ServiceResponse<T> Ok = new ServiceResponse<T> {StatusCode = 200, Success = true};
 
         public static readonly ServiceResponse<T> NoContent = new ServiceResponse<T>
             {StatusCode = 204, Success = false};
