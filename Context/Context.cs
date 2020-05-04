@@ -46,7 +46,7 @@ namespace ApiTools.Context
         Task<bool> Exist(TModelKeyId id, ContextReadOptions options = default);
         Task<bool> Exist(Expression<Func<TModel, bool>> expression, ContextReadOptions options = default);
         Task<bool> Exist(IEnumerable<Expression<Func<TModel, bool>>> expressions, ContextReadOptions options = default);
-        Task<bool> Exist(IEnumerable<TModelKeyId> expressions, ContextReadOptions options = default);
+        Task<bool> Exist(IEnumerable<TModelKeyId> ids, ContextReadOptions options = default);
         IQueryable<TModel> Order(IQueryable<TModel> entities);
         void Detach(TModel entity);
         Task Save();
