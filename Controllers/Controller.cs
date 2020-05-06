@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ApiTools.Controllers
 {
+    [ApiController]
     public abstract class SuperController<TModel, TModelKeyId, TService> : Controller
         where TModel : DbEntity<TModelKeyId>
         where TService : IService<TModel, TModelKeyId>

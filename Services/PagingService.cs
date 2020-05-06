@@ -42,10 +42,11 @@ namespace ApiTools.Services
             if (_page > 1) set = set.Skip((_page - 1) * _limit);
             set = set.Take(_limit);
 
-            var currentSize = await set.CountAsync();
+            var data = await set.ToListAsync();
+            var currentSize = data.Count;
             return new PagingServiceResponse<T>
             {
-                Data = await set.ToListAsync(),
+                Data = data,
                 Size = _size,
                 CurrentSize = currentSize,
                 Page = _page,
