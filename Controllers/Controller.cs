@@ -23,7 +23,7 @@ namespace ApiTools.Controllers
             if (routeRules == null) return StatusCode(StatusCodes.Status404NotFound);
             if (routeRules.AllowAnonymous) return null;
             if (User == null) return StatusCode(StatusCodes.Status403Forbidden);
-            return routeRules.Roles.Any(role => User.IsInRole(role))
+            return routeRules.Rules.Any(role => User.IsInRole(role))
                 ? null
                 : StatusCode(StatusCodes.Status403Forbidden);
         }
@@ -50,6 +50,16 @@ namespace ApiTools.Controllers
             var response = await Service.Read(id);
             return GenerateResult(response);
         }
+
+        // [HttpGet]
+        // [Route("{id}/{field}")]
+        // public virtual async Task<IActionResult> GetResourceField([FromRoute] TModelKeyId id, [FromRoute] string field)
+        // {
+        //     var rolesResponse = CheckUserRoles(GetResource_Roles());
+        //     if (rolesResponse != null) return rolesResponse;
+        //     var response = await Service.Read(id, field);
+        //     return GenerateResult(response);
+        // }
 
 
         [HttpDelete]
@@ -79,7 +89,14 @@ namespace ApiTools.Controllers
         public IActionResult GenerateResult(ServiceResponse response)
         {
             if (!response.Success) return GenerateResponseMessages(response.StatusCode, response.Messages);
-            
+
+            return StatusCode(response.StatusCode);
+        }
+
+        public IActionResult GenerateResult<T>(ServiceResponse<T> response)
+        {
+            if (!response.Success) return GenerateResponseMessages(response.StatusCode, response.Messages);
+
             return StatusCode(response.StatusCode);
         }
 
@@ -102,49 +119,50 @@ namespace ApiTools.Controllers
             return StatusCode(statusCode, value);
         }
 
-        protected virtual IActionResult GenerateResponseMessages(int statusCode, IEnumerable<IServiceResponseMessage> messages)
+        protected virtual IActionResult GenerateResponseMessages(int statusCode,
+            IEnumerable<IServiceResponseMessage> messages)
         {
             return StatusCode(statusCode, messages);
         }
 
-        public virtual RouteRules CreateResource_Roles()
+        protected virtual RouteRules CreateResource_Roles()
         {
             return null;
         }
 
-        public virtual RouteRules CreateResources_Roles()
+        protected virtual RouteRules CreateResources_Roles()
+        {
+            return CreateResource_Roles();
+        }
+
+        protected virtual RouteRules GetResource_Roles()
         {
             return null;
         }
 
-        public virtual RouteRules GetResource_Roles()
+        protected virtual RouteRules GetResources_Roles()
+        {
+            return GetResource_Roles();
+        }
+
+        protected virtual RouteRules UpdateResource_Roles()
         {
             return null;
         }
 
-        public virtual RouteRules GetResources_Roles()
+        protected virtual RouteRules UpdateResources_Roles()
+        {
+            return UpdateResource_Roles();
+        }
+
+        protected virtual RouteRules DeleteResource_Roles()
         {
             return null;
         }
 
-        public virtual RouteRules UpdateResource_Roles()
+        protected virtual RouteRules DeleteResources_Roles()
         {
-            return null;
-        }
-
-        public virtual RouteRules UpdateResources_Roles()
-        {
-            return null;
-        }
-
-        public virtual RouteRules DeleteResource_Roles()
-        {
-            return null;
-        }
-
-        public virtual RouteRules DeleteResources_Roles()
-        {
-            return null;
+            return DeleteResource_Roles();
         }
     }
 

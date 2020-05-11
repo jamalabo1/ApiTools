@@ -1,6 +1,7 @@
 ﻿using System.Linq;
 using System.Reflection;
 using ApiTools.Extensions;
+using ApiTools.Helpers;
 using Microsoft.AspNetCore.Http;
 
 namespace ApiTools.Services
@@ -29,7 +30,7 @@ namespace ApiTools.Services
                         var value = stringValues[i];
                         var desc = value.StartsWith("-");
                         var propName = value.Replace("-", "");
-                        var propInfo = _propInfo<T>(propName);
+                        var propInfo = PropertyHelper.PropertyInfo<T>(propName);
 
                         if (propInfo == null) continue;
                         set = i == 0 ? set.OrderBy(propName, propInfo, desc) : set.ThenBy(propName, propInfo, desc);
@@ -39,18 +40,6 @@ namespace ApiTools.Services
         }
 
 
-        private static PropertyInfo _propInfo<T>(string propertyName)
-        {
-            var split = propertyName.Split(".");
-            PropertyInfo propInfo = null;
-            foreach (var p in split)
-                if (propInfo == null)
-                    propInfo = typeof(T).GetProperty(p,
-                        BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
-                else
-                    propInfo = propInfo.PropertyType.GetProperty(p,
-                        BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
-            return propInfo;
-        }
+ 
     }
 }
