@@ -97,7 +97,7 @@ namespace ApiTools.Controllers
         {
             if (!response.Success) return GenerateResponseMessages(response.StatusCode, response.Messages);
 
-            return StatusCode(response.StatusCode);
+            return StatusCode(response.StatusCode, response.Response);
         }
 
         public IActionResult GenerateResult(ServiceResponse<TModel> response)
@@ -185,7 +185,7 @@ namespace ApiTools.Controllers
         }
 
         [HttpPost]
-        [Route("/bulk")]
+        [Route("bulk")]
         public virtual async Task<IActionResult> CreateResources([FromBody] IEnumerable<TModelData> data)
         {
             var rolesResponse = CheckUserRoles(CreateResources_Roles());
@@ -209,7 +209,7 @@ namespace ApiTools.Controllers
         }
 
         [HttpPut]
-        [Route("/bulk")]
+        [Route("bulk")]
         public virtual async Task<IActionResult> UpdateResources(
             [FromBody] List<BulkUpdateModel<TModelData, TModelKeyId>> bulkUpdateModels)
         {
