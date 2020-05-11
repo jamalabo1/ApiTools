@@ -4,7 +4,7 @@ namespace ApiTools.Models
 {
     public partial class RouteRules
     {
-        public IEnumerable<string> Rules { get; set; }
+        public IEnumerable<string> Roles { get; set; }
         public bool AllowAnonymous { get; set; } = false;
     }
 }

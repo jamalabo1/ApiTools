@@ -23,7 +23,7 @@ namespace ApiTools.Controllers
             if (routeRules == null) return StatusCode(StatusCodes.Status404NotFound);
             if (routeRules.AllowAnonymous) return null;
             if (User == null) return StatusCode(StatusCodes.Status403Forbidden);
-            return routeRules.Rules.Any(role => User.IsInRole(role))
+            return routeRules.Roles.Any(role => User.IsInRole(role))
                 ? null
                 : StatusCode(StatusCodes.Status403Forbidden);
         }

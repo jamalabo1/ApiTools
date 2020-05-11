@@ -12,6 +12,8 @@
         <RepositoryUrl>https://github.com/jamalabo1/ApiTools</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <PackageTags>asp.net, web api</PackageTags>
+        <NeutralLanguage>en-US</NeutralLanguage>
     </PropertyGroup>
 
     <ItemGroup>
