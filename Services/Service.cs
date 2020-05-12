@@ -328,7 +328,7 @@ namespace ApiTools.Services
             }
 
             await _context.Save();
-
+            var triggerSave = data.Count > 0;
             var entities = new List<TModel>();
             foreach (var (serviceResponse, modelData) in data)
             {
@@ -336,7 +336,10 @@ namespace ApiTools.Services
                 if (!createRelationResponse.Success)
                     return ServiceResponse<IEnumerable<TModel>>.FromOtherResponse(createRelationResponse);
                 entities.Add(serviceResponse.Response);
+                triggerSave = (await PostUpdate(serviceResponse.Response)).TriggerSave;
             }
+
+            if (triggerSave) await _context.Save();
 
             return new ServiceResponse<IEnumerable<TModel>>
             {
@@ -385,7 +388,7 @@ namespace ApiTools.Services
 
             await _context.Save();
 
-            var triggerSave = true;
+            var triggerSave = updateData.Count > 0;
             foreach (var (serviceResponse, modelData) in updateData)
             {
                 var updateRelationData = await UpdateRelationData(serviceResponse, modelData);
@@ -405,12 +408,14 @@ namespace ApiTools.Services
         protected virtual Task<ServiceResponse<TModel>> CreateRelationData(ServiceResponse<TModel> response,
             TModelData data)
         {
+            response.TriggerSave = false;
             return Task.FromResult(response);
         }
 
         protected virtual Task<ServiceResponse> UpdateRelationData(ServiceResponse<TModel> response,
             TModelData data)
         {
+            response.TriggerSave = false;
             return Task.FromResult((ServiceResponse) response);
         }
 
@@ -420,7 +425,8 @@ namespace ApiTools.Services
             {
                 Success = false,
                 Response = default,
-                StatusCode = StatusCodes.Status500InternalServerError
+                StatusCode = StatusCodes.Status500InternalServerError,
+                TriggerSave = false
             });
         }
 
@@ -430,7 +436,8 @@ namespace ApiTools.Services
             {
                 Success = false,
                 Response = default,
-                StatusCode = StatusCodes.Status500InternalServerError
+                StatusCode = StatusCodes.Status500InternalServerError,
+                TriggerSave = false
             });
         }
 
