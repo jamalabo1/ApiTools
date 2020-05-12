@@ -332,6 +332,7 @@ namespace ApiTools.Services
             var entities = new List<TModel>();
             foreach (var (serviceResponse, modelData) in data)
             {
+                serviceResponse.TriggerSave = true;
                 var createRelationResponse = await CreateRelationData(serviceResponse, modelData);
                 if (!createRelationResponse.Success)
                     return ServiceResponse<IEnumerable<TModel>>.FromOtherResponse(createRelationResponse);
@@ -391,6 +392,7 @@ namespace ApiTools.Services
             var triggerSave = updateData.Count > 0;
             foreach (var (serviceResponse, modelData) in updateData)
             {
+                serviceResponse.TriggerSave = true;
                 var updateRelationData = await UpdateRelationData(serviceResponse, modelData);
                 if (!updateRelationData.Success) return updateRelationData;
                 triggerSave = (await PostUpdate(serviceResponse.Response)).TriggerSave;
