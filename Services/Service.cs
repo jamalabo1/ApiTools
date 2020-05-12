@@ -337,7 +337,7 @@ namespace ApiTools.Services
                 if (!createRelationResponse.Success)
                     return ServiceResponse<IEnumerable<TModel>>.FromOtherResponse(createRelationResponse);
                 entities.Add(serviceResponse.Response);
-                triggerSave = (await PostUpdate(serviceResponse.Response)).TriggerSave;
+                triggerSave = createRelationResponse.TriggerSave;
             }
 
             if (triggerSave) await _context.Save();
