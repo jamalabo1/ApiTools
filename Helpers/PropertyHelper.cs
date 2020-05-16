@@ -7,7 +7,7 @@ namespace ApiTools.Helpers
 {
     public class PropertyHelper
     {
-        public static PropertyInfo PropertyInfo<T>(string propertyName)
+        public static PropertyInfo PropertyInfo<T>(string propertyName, bool enableNesting = true)
         {
             var split = propertyName.Split(".");
             PropertyInfo propInfo = null;
@@ -15,20 +15,25 @@ namespace ApiTools.Helpers
                 if (propInfo == null)
                     propInfo = typeof(T).GetProperty(p,
                         BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
-                else
+                else if (enableNesting)
                     propInfo = propInfo.PropertyType.GetProperty(p,
                         BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
+
             return propInfo;
         }
 
-        public static Expression<Func<T, object>> PropertyFunc<T>(string propertyName)
+
+        public static Expression<Func<T, object>> PropertyFunc<T>(string propertyName, bool enableNesting = true)
         {
-            Expression param = Expression.Parameter(typeof(T), "x");
+            var param = Expression.Parameter(typeof(T), "x");
             var split = propertyName.Split(".");
-            var body = split.Aggregate(param, Expression.PropertyOrField);
-            // x.{propertyName}
-            var func = Expression.Lambda<Func<T, object>>(body);
-            return func;
+
+            var expressionParam = (Expression) param;
+            var body = enableNesting
+                ? split.Aggregate(expressionParam, Expression.PropertyOrField)
+                : Expression.PropertyOrField(expressionParam, split.FirstOrDefault() ?? propertyName);
+            var convert = Expression.Convert(body, typeof(object));
+            return (Expression<Func<T, object>>) Expression.Lambda(convert, param);
         }
     }
 }

@@ -86,28 +86,28 @@ namespace ApiTools.Controllers
         }
 
 
-        public IActionResult GenerateResult(ServiceResponse response)
+        protected virtual IActionResult GenerateResult(ServiceResponse response)
         {
             if (!response.Success) return GenerateResponseMessages(response.StatusCode, response.Messages);
 
             return StatusCode(response.StatusCode);
         }
 
-        public IActionResult GenerateResult<T>(ServiceResponse<T> response)
+        protected virtual IActionResult GenerateResult<T>(ServiceResponse<T> response)
         {
             if (!response.Success) return GenerateResponseMessages(response.StatusCode, response.Messages);
 
             return StatusCode(response.StatusCode, response.Response);
         }
 
-        public IActionResult GenerateResult(ServiceResponse<TModel> response)
+        protected virtual IActionResult GenerateResult(ServiceResponse<TModel> response)
         {
             if (!response.Success) return GenerateResponseMessages(response.StatusCode, response.Messages);
 
             return GenerateActionResult(response.StatusCode, response.Response);
         }
 
-        public IActionResult GenerateResult(ServiceResponse<PagingServiceResponse<TModel>> response)
+        protected virtual IActionResult GenerateResult(ServiceResponse<PagingServiceResponse<TModel>> response)
         {
             if (!response.Success) return GenerateResponseMessages(response.StatusCode, response.Messages);
 
