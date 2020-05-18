@@ -23,17 +23,25 @@ namespace ApiTools.Helpers
         }
 
 
-        public static Expression<Func<T, object>> PropertyFunc<T>(string propertyName, bool enableNesting = true)
+        public static Expression<Func<T, TProperty>> PropertyLambda<T, TProperty>(string propertyName,
+            bool enableNesting = true)
+        {
+            var (body, param) = PropertyFunc<T>(propertyName, enableNesting);
+            return (Expression<Func<T, TProperty>>) Expression.Lambda(body, param);
+        }
+
+        public static (Expression, ParameterExpression) PropertyFunc<T>(string propertyName,
+            bool enableNesting = true)
         {
             var param = Expression.Parameter(typeof(T), "x");
             var split = propertyName.Split(".");
 
-            var expressionParam = (Expression) param;
+            var convertedParam = (Expression) param;
             var body = enableNesting
-                ? split.Aggregate(expressionParam, Expression.PropertyOrField)
-                : Expression.PropertyOrField(expressionParam, split.FirstOrDefault() ?? propertyName);
-            var convert = Expression.Convert(body, typeof(object));
-            return (Expression<Func<T, object>>) Expression.Lambda(convert, param);
+                ? split.Aggregate(convertedParam, Expression.PropertyOrField)
+                : Expression.PropertyOrField(convertedParam, split.FirstOrDefault() ?? propertyName);
+
+            return (body, param);
         }
     }
 }

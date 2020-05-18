@@ -86,6 +86,17 @@ namespace ApiTools.Controllers
         }
 
 
+        [HttpGet]
+        [Route("{id}/{field}")]
+        public virtual async Task<IActionResult> GetResourceField([FromRoute] TModelKeyId id, [FromRoute] string field)
+        {
+            var rolesResponse = CheckUserRoles(GetResourceField_Roles());
+            if (rolesResponse != null) return rolesResponse;
+            
+            var response = await Service.Read(id, field);
+            return Ok(response.Response);
+        }
+        
         protected virtual IActionResult GenerateResult(ServiceResponse response)
         {
             if (!response.Success) return GenerateResponseMessages(response.StatusCode, response.Messages);
@@ -126,6 +137,11 @@ namespace ApiTools.Controllers
         }
 
         protected virtual RouteRules CreateResource_Roles()
+        {
+            return null;
+        }
+
+        protected virtual RouteRules GetResourceField_Roles()
         {
             return null;
         }

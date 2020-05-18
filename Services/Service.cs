@@ -1,8 +1,15 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
+using System.Linq.Expressions;
+using System.Reflection;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using ApiTools.Context;
+using ApiTools.Extensions;
+using ApiTools.Helpers;
 using ApiTools.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -28,6 +35,10 @@ namespace ApiTools.Services
 
         Task<ServiceResponse> Delete(TModelKeyId id);
         Task<ServiceResponse> Delete(IEnumerable<TModelKeyId> ids);
+
+        Task<ServiceResponse<object>> Read(TModelKeyId id, string selectField,
+            ServiceReadOptions<TModel> options = default,
+            ContextReadOptions readOptions = default);
     }
 
     public interface IService<TModel, TModelKeyId, TModelData>
@@ -167,6 +178,39 @@ namespace ApiTools.Services
         }
 
 
+        public async Task<ServiceResponse<object>> Read(TModelKeyId id, string selectField,
+            ServiceReadOptions<TModel> options = default,
+            ContextReadOptions readOptions = default)
+        {
+            options ??= new ServiceReadOptions<TModel>
+            {
+                Filter = false,
+                Includes = ArraySegment<Expression<Func<TModel, dynamic>>>.Empty,
+                Sort = false
+            };
+
+            var query = await ApplyReadOptions(_context.Find(_context.FindById(id), readOptions), options);
+
+            var propertyInfo = PropertyHelper.PropertyInfo<TModel>(selectField, false);
+            if (propertyInfo == null) return ServiceResponse<object>.NotFound;
+
+            if (Attribute.IsDefined(propertyInfo, typeof(JsonIgnoreAttribute)) ||
+                Attribute.IsDefined(propertyInfo, typeof(Newtonsoft.Json.JsonIgnoreAttribute)))
+                return ServiceResponse<object>.NotFound;
+
+            var model = await AccessPropertyFunc(selectField, propertyInfo, query, false);
+
+            if (model == null) return ServiceResponse<object>.NotFound;
+
+            return new ServiceResponse<object>
+            {
+                Success = true,
+                Response = model,
+                StatusCode = StatusCodes.Status200OK
+            };
+        }
+
+
         protected virtual async Task<IQueryable<TModel>> ApplyReadOptions(IQueryable<TModel> query,
             ServiceReadOptions<TModel> options = default)
         {
@@ -266,6 +310,115 @@ namespace ApiTools.Services
         {
             return Task.FromResult(set);
         }
+
+        protected virtual async Task<object> AccessPropertyFunc(string propertyName, PropertyInfo propertyInfo,
+            IQueryable<TModel> query, bool enableNesting = true)
+        {
+            if (Attribute.IsDefined(propertyInfo, typeof(NotMappedAttribute)))
+            {
+                var result = await query.Take(1).ToListAsync();
+                return result.Select(PropertyHelper.PropertyLambda<TModel, object>(propertyName, enableNesting)
+                        .Compile())
+                    .SingleOrDefault();
+            }
+
+            var (body, param) = PropertyHelper.PropertyFunc<TModel>(propertyName, enableNesting);
+            var parameters = new List<object> {query, body, param};
+
+            MethodInfo methodType;
+            Type baseType;
+
+            if (propertyInfo.GetAccessors()[0].IsVirtual)
+            {
+                if (propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)))
+                    methodType = GetType().GetMethod(nameof(SelectManyVirtual));
+                else
+                    methodType = GetType().GetMethod(nameof(SelectOneVirtual));
+            }
+            else
+            {
+                if (propertyInfo.PropertyType.IsArray)
+                {
+                    methodType = GetType().GetMethod(nameof(SelectMany));
+                    parameters.Add(true);
+                }
+                else if (propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)))
+                {
+                    methodType = GetType().GetMethod(nameof(SelectMany));
+                    parameters.Add(false);
+                }
+                else
+                {
+                    methodType = GetType().GetMethod(nameof(SelectOne));
+                }
+            }
+
+            if (propertyInfo.PropertyType.IsArray)
+                baseType = propertyInfo.PropertyType.GetElementType();
+            else if (propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)))
+                baseType = propertyInfo.PropertyType.GetGenericArguments().FirstOrDefault();
+            else
+                baseType = propertyInfo.PropertyType;
+
+            if (methodType == null) return null;
+            if (baseType == null) return null;
+            var method = methodType.MakeGenericMethod(typeof(TModel),
+                baseType);
+
+            return await method.InvokeAsync(this, parameters.ToArray());
+        }
+
+        protected virtual async Task<IEnumerable<TProperty>> SelectManyVirtual<T, TProperty>(IQueryable<T> query,
+            Expression body,
+            ParameterExpression param)
+        {
+            var expressionSelect = Expression.Lambda<Func<T, IEnumerable<TProperty>>>(body, param);
+            var selectMany = query.SelectMany(expressionSelect);
+            var selectQuery = SelectQuery(selectMany.AsQueryable());
+            return await selectQuery.ToListAsync();
+        }
+
+        protected virtual async Task<IEnumerable<TProperty>> SelectMany<T, TProperty>(IQueryable<T> query,
+            Expression body,
+            ParameterExpression param, bool isArray)
+        {
+            if (isArray)
+            {
+                var expressionSelect = Expression.Lambda<Func<T, TProperty[]>>(body, param);
+                var selectMany = query.Select(expressionSelect);
+                var result = await selectMany.SingleOrDefaultAsync();
+                return result;
+            }
+            else
+            {
+                var expressionSelect = Expression.Lambda<Func<T, List<TProperty>>>(body, param);
+                var selectMany = query.Select(expressionSelect);
+                var result = await selectMany.SingleOrDefaultAsync();
+                return result;
+            }
+        }
+
+        protected virtual async Task<TProperty> SelectOneVirtual<T, TProperty>(IQueryable<T> query, Expression body,
+            ParameterExpression param)
+        {
+            var expressionSelect = Expression.Lambda<Func<T, TProperty>>(body, param);
+            var selectMany = query.Select(expressionSelect);
+            var selectQuery = SelectQuery(selectMany.AsQueryable());
+            return await selectQuery.SingleOrDefaultAsync();
+        }
+
+        protected virtual async Task<TProperty> SelectOne<T, TProperty>(IQueryable<T> query, Expression body,
+            ParameterExpression param)
+        {
+            var expressionSelect = Expression.Lambda<Func<T, TProperty>>(body, param);
+            var selectMany = query.Select(expressionSelect);
+            return await selectMany.SingleOrDefaultAsync();
+        }
+
+        protected virtual IQueryable<TProperty> SelectQuery<TProperty>(IQueryable<TProperty> query)
+        {
+            return query;
+        }
     }
 
     public abstract class
@@ -279,8 +432,6 @@ namespace ApiTools.Services
         private readonly IHttpContextAccessor _accessor;
         private readonly IAuthorizationService _authorization;
         private readonly TContext _context;
-        private readonly IPagingService _pagingService;
-        private readonly ISort _sort;
 
         protected Service(TContext context, IAuthorizationService authorization, IHttpContextAccessor accessor,
             IPagingService pagingService, ISort sort) : base(context, authorization, accessor, pagingService, sort)
@@ -288,8 +439,6 @@ namespace ApiTools.Services
             _context = context;
             _authorization = authorization;
             _accessor = accessor;
-            _pagingService = pagingService;
-            _sort = sort;
         }
 
         protected Service(TContext context, IAuthorizationService authorization, IHttpContextAccessor accessor,
@@ -298,7 +447,6 @@ namespace ApiTools.Services
             _context = context;
             _authorization = authorization;
             _accessor = accessor;
-            _pagingService = pagingService;
         }
 
         public virtual async Task<ServiceResponse<TModel>> Create(TModelData data)
