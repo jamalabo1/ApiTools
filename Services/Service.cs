@@ -331,25 +331,25 @@ namespace ApiTools.Services
             if (propertyInfo.GetAccessors()[0].IsVirtual)
             {
                 if (propertyInfo.PropertyType.IsInterface && propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)) || propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IList)))
-                    methodType = GetType().GetMethod(nameof(SelectManyVirtual));
+                    methodType = GetType().GetMethod(nameof(SelectManyVirtual), BindingFlags.Instance | BindingFlags.NonPublic);
                 else
-                    methodType = GetType().GetMethod(nameof(SelectOneVirtual));
+                    methodType = GetType().GetMethod(nameof(SelectOneVirtual), BindingFlags.Instance | BindingFlags.NonPublic);
             }
             else
             {
                 if (propertyInfo.PropertyType.IsArray)
                 {
-                    methodType = GetType().GetMethod(nameof(SelectMany));
+                    methodType = GetType().GetMethod(nameof(SelectMany), BindingFlags.Instance | BindingFlags.NonPublic);
                     parameters.Add(true);
                 }
                 else if (propertyInfo.PropertyType.IsInterface && propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)) || propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IList)))
                 {
-                    methodType = GetType().GetMethod(nameof(SelectMany));
+                    methodType = GetType().GetMethod(nameof(SelectMany), BindingFlags.Instance | BindingFlags.NonPublic);
                     parameters.Add(false);
                 }
                 else
                 {
-                    methodType = GetType().GetMethod(nameof(SelectOne));
+                    methodType = GetType().GetMethod(nameof(SelectOne), BindingFlags.Instance | BindingFlags.NonPublic);
                 }
             }
 
