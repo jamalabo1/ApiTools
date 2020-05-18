@@ -330,7 +330,7 @@ namespace ApiTools.Services
 
             if (propertyInfo.GetAccessors()[0].IsVirtual)
             {
-                if (propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)))
+                if (propertyInfo.PropertyType.IsInterface && propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)) || propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IList)))
                     methodType = GetType().GetMethod(nameof(SelectManyVirtual));
                 else
                     methodType = GetType().GetMethod(nameof(SelectOneVirtual));
@@ -342,7 +342,7 @@ namespace ApiTools.Services
                     methodType = GetType().GetMethod(nameof(SelectMany));
                     parameters.Add(true);
                 }
-                else if (propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)))
+                else if (propertyInfo.PropertyType.IsInterface && propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)) || propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IList)))
                 {
                     methodType = GetType().GetMethod(nameof(SelectMany));
                     parameters.Add(false);
@@ -355,7 +355,7 @@ namespace ApiTools.Services
 
             if (propertyInfo.PropertyType.IsArray)
                 baseType = propertyInfo.PropertyType.GetElementType();
-            else if (propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)))
+            else if (propertyInfo.PropertyType.IsInterface && propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)) || propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IList)))
                 baseType = propertyInfo.PropertyType.GetGenericArguments().FirstOrDefault();
             else
                 baseType = propertyInfo.PropertyType;
