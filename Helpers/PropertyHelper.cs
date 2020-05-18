@@ -1,15 +1,19 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text;
+using ApiTools.Extensions;
 
 namespace ApiTools.Helpers
 {
     public class PropertyHelper
     {
-        public static PropertyInfo PropertyInfo<T>(string propertyName, bool enableNesting = true)
+        public static PropertyInfo PropertyInfo<T>(string propertyName, bool enableNesting = true,
+            bool enableDashedNames = true)
         {
-            var split = propertyName.Split(".");
+            var split = AccessPropertyFromName(propertyName, enableDashedNames);
             PropertyInfo propInfo = null;
             foreach (var p in split)
                 if (propInfo == null)
@@ -22,6 +26,28 @@ namespace ApiTools.Helpers
             return propInfo;
         }
 
+        private static IEnumerable<string> AccessPropertyFromName(string propertyName,
+            bool enableDashedNames = true)
+        {
+            IEnumerable<string> split;
+
+            if (enableDashedNames)
+            {
+                var dashSplit = propertyName.Split("-");
+                var normalizedName = new StringBuilder();
+                foreach (var dashed in dashSplit)
+                    if (dashed != "" && dashed != string.Empty)
+                        normalizedName.Append(dashed.FirstCharToUpper());
+                split = new[] {normalizedName.ToString()};
+            }
+            else
+            {
+                split = propertyName.Split(".");
+            }
+
+            return split;
+        }
+
 
         public static Expression<Func<T, TProperty>> PropertyLambda<T, TProperty>(string propertyName,
             bool enableNesting = true)
@@ -31,10 +57,10 @@ namespace ApiTools.Helpers
         }
 
         public static (Expression, ParameterExpression) PropertyFunc<T>(string propertyName,
-            bool enableNesting = true)
+            bool enableNesting = true, bool enableDashedNames = true)
         {
             var param = Expression.Parameter(typeof(T), "x");
-            var split = propertyName.Split(".");
+            var split = AccessPropertyFromName(propertyName, enableDashedNames);
 
             var convertedParam = (Expression) param;
             var body = enableNesting

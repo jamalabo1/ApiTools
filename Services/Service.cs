@@ -139,7 +139,7 @@ namespace ApiTools.Services
             };
         }
 
-        public async Task<ServiceResponse<TModel>> Read(TModelKeyId id,
+        public virtual async Task<ServiceResponse<TModel>> Read(TModelKeyId id,
             ServiceReadOptions<TModel> options = default,
             ContextReadOptions readOptions = default)
         {
@@ -156,7 +156,7 @@ namespace ApiTools.Services
             };
         }
 
-        public async Task<ServiceResponse<IEnumerable<TModel>>> Read(IEnumerable<TModelKeyId> ids,
+        public virtual async Task<ServiceResponse<IEnumerable<TModel>>> Read(IEnumerable<TModelKeyId> ids,
             ServiceReadOptions<TModel> options = default,
             ContextReadOptions readOptions = default)
         {
@@ -178,7 +178,7 @@ namespace ApiTools.Services
         }
 
 
-        public async Task<ServiceResponse<object>> Read(TModelKeyId id, string selectField,
+        public virtual async Task<ServiceResponse<object>> Read(TModelKeyId id, string selectField,
             ServiceReadOptions<TModel> options = default,
             ContextReadOptions readOptions = default)
         {
