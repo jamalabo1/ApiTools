@@ -138,12 +138,12 @@ namespace ApiTools.Controllers
 
         protected virtual RouteRules CreateResource_Roles()
         {
-            return null;
+            return DefaultShared_Roles();
         }
 
         protected virtual RouteRules GetResourceField_Roles()
         {
-            return null;
+            return DefaultShared_Roles();
         }
 
         protected virtual RouteRules CreateResources_Roles()
@@ -153,7 +153,7 @@ namespace ApiTools.Controllers
 
         protected virtual RouteRules GetResource_Roles()
         {
-            return null;
+            return DefaultShared_Roles();
         }
 
         protected virtual RouteRules GetResources_Roles()
@@ -163,7 +163,7 @@ namespace ApiTools.Controllers
 
         protected virtual RouteRules UpdateResource_Roles()
         {
-            return null;
+            return DefaultShared_Roles();
         }
 
         protected virtual RouteRules UpdateResources_Roles()
@@ -173,12 +173,17 @@ namespace ApiTools.Controllers
 
         protected virtual RouteRules DeleteResource_Roles()
         {
-            return null;
+            return DefaultShared_Roles();
         }
 
         protected virtual RouteRules DeleteResources_Roles()
         {
             return DeleteResource_Roles();
+        }
+
+        protected virtual RouteRules DefaultShared_Roles()
+        {
+            return null;
         }
     }
 
