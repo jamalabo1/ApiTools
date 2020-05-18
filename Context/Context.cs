@@ -135,7 +135,9 @@ namespace ApiTools.Context
         public virtual async Task<TModel> FindOne(Expression<Func<TModel, bool>> expression,
             ContextReadOptions options = null)
         {
-            var entity = await Find(expression, options).FirstOrDefaultAsync();
+            var query = Find(expression, options);
+            if (query == default) return default;
+            var entity = await query.FirstOrDefaultAsync();
             if (options != null && options.Track == false && entity != null) Detach(entity);
             return entity;
         }
@@ -248,10 +250,7 @@ namespace ApiTools.Context
         public async Task<bool> Exist(IEnumerable<TModelKeyId> ids,
             ContextReadOptions options = default)
         {
-            if (options?.AllExist == true)
-            {
-                return await Count(_findByIds(ids, options), options) == ids.LongCount();
-            }
+            if (options?.AllExist == true) return await Count(_findByIds(ids, options), options) == ids.LongCount();
             return await Exist(_findByIds(ids, options), options);
         }
 
@@ -269,7 +268,8 @@ namespace ApiTools.Context
             return entities;
         }
 
-        private static Expression<Func<TModel, bool>> _findByIds(IEnumerable<TModelKeyId> ids, ContextReadOptions options)
+        private static Expression<Func<TModel, bool>> _findByIds(IEnumerable<TModelKeyId> ids,
+            ContextReadOptions options)
         {
             var listIds = ids.ToList();
             if (!ModelKeyIdType.IsValueType || ModelKeyIdType.IsEnum) return x => listIds.Contains(x.Id);
@@ -283,20 +283,24 @@ namespace ApiTools.Context
         private async Task<bool> AnyAsync(IEnumerable<Expression<Func<TModel, bool>>> expressions,
             ContextReadOptions options = default)
         {
-            return await Find(expressions, options).AnyAsync();
+            var query = Find(expressions, options);
+            if (query == default) return default;
+            return await query.AnyAsync();
         }
 
         private async Task<long> Count(Expression<Func<TModel, bool>> expression,
             ContextReadOptions options = default)
         {
-            return await Find(expression, options).LongCountAsync();
+            var query = Find(expression, options);
+            if (query == default) return default;
+            return await query.LongCountAsync();
         }
 
         private IQueryable<TModel> _read(ContextReadOptions options = default)
         {
             var set = SetQuery;
-            if (options.Order) set = Order(set);
-            if (options.Query) set = GetQueryProvider(set);
+            if (options != default && options.Order) set = Order(set);
+            if (options != default && options.Query) set = GetQueryProvider(set);
             return set;
         }
 
@@ -310,6 +314,7 @@ namespace ApiTools.Context
                 Track = false
             };
             var set = _read(options);
+            if (set == null) return default;
             return expressions == null
                 ? set
                 : expressions.Aggregate(set, (current, expression) => current.Where(expression));

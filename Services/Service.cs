@@ -330,21 +330,29 @@ namespace ApiTools.Services
 
             if (propertyInfo.GetAccessors()[0].IsVirtual)
             {
-                if (propertyInfo.PropertyType.IsInterface && propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)) || propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IList)))
-                    methodType = GetType().GetMethod(nameof(SelectManyVirtual), BindingFlags.Instance | BindingFlags.NonPublic);
+                if (propertyInfo.PropertyType.IsInterface &&
+                    propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)) ||
+                    propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IList)))
+                    methodType = GetType().GetMethod(nameof(SelectManyVirtual),
+                        BindingFlags.Instance | BindingFlags.NonPublic);
                 else
-                    methodType = GetType().GetMethod(nameof(SelectOneVirtual), BindingFlags.Instance | BindingFlags.NonPublic);
+                    methodType = GetType().GetMethod(nameof(SelectOneVirtual),
+                        BindingFlags.Instance | BindingFlags.NonPublic);
             }
             else
             {
                 if (propertyInfo.PropertyType.IsArray)
                 {
-                    methodType = GetType().GetMethod(nameof(SelectMany), BindingFlags.Instance | BindingFlags.NonPublic);
+                    methodType = GetType()
+                        .GetMethod(nameof(SelectMany), BindingFlags.Instance | BindingFlags.NonPublic);
                     parameters.Add(true);
                 }
-                else if (propertyInfo.PropertyType.IsInterface && propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)) || propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IList)))
+                else if (propertyInfo.PropertyType.IsInterface &&
+                         propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)) ||
+                         propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IList)))
                 {
-                    methodType = GetType().GetMethod(nameof(SelectMany), BindingFlags.Instance | BindingFlags.NonPublic);
+                    methodType = GetType()
+                        .GetMethod(nameof(SelectMany), BindingFlags.Instance | BindingFlags.NonPublic);
                     parameters.Add(false);
                 }
                 else
@@ -355,7 +363,9 @@ namespace ApiTools.Services
 
             if (propertyInfo.PropertyType.IsArray)
                 baseType = propertyInfo.PropertyType.GetElementType();
-            else if (propertyInfo.PropertyType.IsInterface && propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)) || propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IList)))
+            else if (propertyInfo.PropertyType.IsInterface &&
+                     propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)) ||
+                     propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IList)))
                 baseType = propertyInfo.PropertyType.GetGenericArguments().FirstOrDefault();
             else
                 baseType = propertyInfo.PropertyType;
@@ -375,6 +385,7 @@ namespace ApiTools.Services
             var expressionSelect = Expression.Lambda<Func<T, IEnumerable<TProperty>>>(body, param);
             var selectMany = query.SelectMany(expressionSelect);
             var selectQuery = SelectQuery(selectMany.AsQueryable());
+            if (selectQuery == null) return Enumerable.Empty<TProperty>();
             return await selectQuery.ToListAsync();
         }
 
@@ -404,6 +415,7 @@ namespace ApiTools.Services
             var expressionSelect = Expression.Lambda<Func<T, TProperty>>(body, param);
             var selectMany = query.Select(expressionSelect);
             var selectQuery = SelectQuery(selectMany.AsQueryable());
+            if (selectQuery == null) return default;
             return await selectQuery.SingleOrDefaultAsync();
         }
 
