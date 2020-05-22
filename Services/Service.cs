@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
@@ -129,6 +128,9 @@ namespace ApiTools.Services
                     "Sort was not supplied from the constructor, this method cannot be called without it.");
 
             var query = await ApplyReadOptions(_context.Find(readOptions), options);
+
+            if (query == null) return ServiceResponse<PagingServiceResponse<TModel>>.Forbidden;
+
             var response = await _readWithPaging(query);
 
             return new ServiceResponse<PagingServiceResponse<TModel>>
@@ -144,6 +146,9 @@ namespace ApiTools.Services
             ContextReadOptions readOptions = default)
         {
             var query = await ApplyReadOptions(_context.Find(_context.FindById(id), readOptions), options);
+
+            if (query == null) return ServiceResponse<TModel>.Forbidden;
+
             var model = await query.SingleOrDefaultAsync();
 
             if (model == null) return ServiceResponse<TModel>.NotFound;
@@ -161,6 +166,8 @@ namespace ApiTools.Services
             ContextReadOptions readOptions = default)
         {
             var query = await ApplyReadOptions(_context.FindByIds(ids, readOptions), options);
+            if (query == null) return ServiceResponse<IEnumerable<TModel>>.Forbidden;
+
             var models = await query.ToListAsync();
 
             foreach (var model in models)
@@ -186,19 +193,24 @@ namespace ApiTools.Services
             {
                 Filter = false,
                 Includes = ArraySegment<Expression<Func<TModel, dynamic>>>.Empty,
-                Sort = false
+                Sort = false,
+                EnableDashedProperty = true,
+                EnablePropertyNesting = true
             };
 
             var query = await ApplyReadOptions(_context.Find(_context.FindById(id), readOptions), options);
 
-            var propertyInfo = PropertyHelper.PropertyInfo<TModel>(selectField, false);
+            if (query == null) return ServiceResponse<object>.Forbidden;
+
+            var propertyInfo = PropertyHelper.PropertyInfo<TModel>(selectField, options.EnablePropertyNesting,
+                options.MaxPropertyNestingLevel);
             if (propertyInfo == null) return ServiceResponse<object>.NotFound;
 
             if (Attribute.IsDefined(propertyInfo, typeof(JsonIgnoreAttribute)) ||
                 Attribute.IsDefined(propertyInfo, typeof(Newtonsoft.Json.JsonIgnoreAttribute)))
                 return ServiceResponse<object>.NotFound;
 
-            var model = await AccessPropertyFunc(selectField, propertyInfo, query, false);
+            var model = await AccessPropertyFunc<TModel>(selectField, propertyInfo, query, options);
 
             if (model == null) return ServiceResponse<object>.NotFound;
 
@@ -210,10 +222,10 @@ namespace ApiTools.Services
             };
         }
 
-
         protected virtual async Task<IQueryable<TModel>> ApplyReadOptions(IQueryable<TModel> query,
             ServiceReadOptions<TModel> options = default)
         {
+            if (query == null) return null;
             options ??= new ServiceReadOptions<TModel>
             {
                 Filter = true,
@@ -224,7 +236,6 @@ namespace ApiTools.Services
                 query = options.Includes.Aggregate(query, (current, include) => current.Include(include));
 
             if (options.Filter) query = await ApplyFilter(query);
-
             if (options.Sort) query = _sort.SortByKey(query);
 
             return query;
@@ -311,71 +322,18 @@ namespace ApiTools.Services
             return Task.FromResult(set);
         }
 
-        protected virtual async Task<object> AccessPropertyFunc(string propertyName, PropertyInfo propertyInfo,
-            IQueryable<TModel> query, bool enableNesting = true)
+        protected virtual IEnumerable<TProperty>  SelectManyNotMapped<T, TProperty>(IEnumerable<T> set, Expression body,
+            ParameterExpression param)
         {
-            if (Attribute.IsDefined(propertyInfo, typeof(NotMappedAttribute)))
-            {
-                var result = await query.Take(1).ToListAsync();
-                return result.Select(PropertyHelper.PropertyLambda<TModel, object>(propertyName, enableNesting)
-                        .Compile())
-                    .SingleOrDefault();
-            }
+            var expressionSelect = Expression.Lambda<Func<T, IEnumerable<TProperty>>>(body, param);
+            return set.SelectMany(expressionSelect.Compile());
+        }
 
-            var (body, param) = PropertyHelper.PropertyFunc<TModel>(propertyName, enableNesting);
-            var parameters = new List<object> {query, body, param};
-
-            MethodInfo methodType;
-            Type baseType;
-
-            if (propertyInfo.GetAccessors()[0].IsVirtual)
-            {
-                if (propertyInfo.PropertyType.IsInterface &&
-                    propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)) ||
-                    propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IList)))
-                    methodType = GetType().GetMethod(nameof(SelectManyVirtual),
-                        BindingFlags.Instance | BindingFlags.NonPublic);
-                else
-                    methodType = GetType().GetMethod(nameof(SelectOneVirtual),
-                        BindingFlags.Instance | BindingFlags.NonPublic);
-            }
-            else
-            {
-                if (propertyInfo.PropertyType.IsArray)
-                {
-                    methodType = GetType()
-                        .GetMethod(nameof(SelectMany), BindingFlags.Instance | BindingFlags.NonPublic);
-                    parameters.Add(true);
-                }
-                else if (propertyInfo.PropertyType.IsInterface &&
-                         propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)) ||
-                         propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IList)))
-                {
-                    methodType = GetType()
-                        .GetMethod(nameof(SelectMany), BindingFlags.Instance | BindingFlags.NonPublic);
-                    parameters.Add(false);
-                }
-                else
-                {
-                    methodType = GetType().GetMethod(nameof(SelectOne), BindingFlags.Instance | BindingFlags.NonPublic);
-                }
-            }
-
-            if (propertyInfo.PropertyType.IsArray)
-                baseType = propertyInfo.PropertyType.GetElementType();
-            else if (propertyInfo.PropertyType.IsInterface &&
-                     propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)) ||
-                     propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IList)))
-                baseType = propertyInfo.PropertyType.GetGenericArguments().FirstOrDefault();
-            else
-                baseType = propertyInfo.PropertyType;
-
-            if (methodType == null) return null;
-            if (baseType == null) return null;
-            var method = methodType.MakeGenericMethod(typeof(TModel),
-                baseType);
-
-            return await method.InvokeAsync(this, parameters.ToArray());
+        protected virtual TProperty SelectOneNotMapped<T, TProperty>(IEnumerable<T> set, Expression body,
+            ParameterExpression param)
+        {
+            var expressionSelect = Expression.Lambda<Func<T, TProperty>>(body, param);
+            return set.Select(expressionSelect.Compile()).FirstOrDefault();
         }
 
         protected virtual async Task<IEnumerable<TProperty>> SelectManyVirtual<T, TProperty>(IQueryable<T> query,
@@ -430,6 +388,168 @@ namespace ApiTools.Services
         protected virtual IQueryable<TProperty> SelectQuery<TProperty>(IQueryable<TProperty> query)
         {
             return query;
+        }
+
+
+        protected virtual async Task<object> AccessPropertyFunc<T>(string propertyName, PropertyInfo propertyInfo,
+            IQueryable<TModel> query, ServiceReadOptions<TModel> options)
+        {
+            var parameters = new List<object> {query};
+            MethodInfo methodType;
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+
+            if (!PropertyHelper.IsAccessingAList<T>(propertyName, options.EnablePropertyNesting,
+                options.MaxPropertyNestingLevel, options.EnableDashedProperty))
+            {
+                var (body, param) = PropertyHelper.PropertyFunc<T>(propertyName, options.EnablePropertyNesting,
+                    options.MaxPropertyNestingLevel, options.EnableDashedProperty);
+                parameters.AddRange(new[] {body, param});
+
+                if (Attribute.IsDefined(propertyInfo, typeof(NotMappedAttribute)))
+                {
+                    if (PropertyHelper.IsPropertyAList(propertyInfo))
+                        methodType = GetType().GetMethod(nameof(SelectManyNotMapped), flags);
+                    else
+                        methodType = GetType().GetMethod(nameof(SelectOneNotMapped), flags);
+                }
+                else
+                {
+                    if (propertyInfo.GetAccessors()[0].IsVirtual)
+                    {
+                        if (PropertyHelper.IsPropertyAList(propertyInfo))
+                            methodType = GetType().GetMethod(nameof(SelectManyVirtual), flags);
+                        else
+                            methodType = GetType().GetMethod(nameof(SelectOneVirtual), flags);
+                    }
+                    else
+                    {
+                        if (propertyInfo.PropertyType.IsArray)
+                        {
+                            methodType = GetType()
+                                .GetMethod(nameof(SelectMany), flags);
+                            parameters.Add(true);
+                        }
+                        else if (PropertyHelper.IsPropertyAList(propertyInfo))
+                        {
+                            methodType = GetType()
+                                .GetMethod(nameof(SelectMany), flags);
+                            parameters.Add(false);
+                        }
+                        else
+                        {
+                            methodType = GetType().GetMethod(nameof(SelectOne), flags);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                methodType = GetType().GetMethod(nameof(SelectManyFromListVirtual), flags);
+                parameters.AddRange(
+                    new object[]
+                    {
+                        PropertyHelper.AccessPropertyFromName(propertyName, options.EnablePropertyNesting,
+                            options.MaxPropertyNestingLevel, options.EnableDashedProperty),
+                        options
+                    }
+                );
+            }
+
+            var baseType = BaseType(propertyInfo);
+
+            if (methodType == null) return null;
+            if (baseType == null) return null;
+            var method = methodType.MakeGenericMethod(typeof(T),
+                baseType);
+
+            return await method.InvokeAsync(this, parameters.ToArray());
+        }
+
+        protected virtual Type BaseType(PropertyInfo propertyInfo)
+        {
+            if (propertyInfo.PropertyType.IsArray)
+                return propertyInfo.PropertyType.GetElementType();
+            if (PropertyHelper.IsPropertyAList(propertyInfo))
+                return propertyInfo.PropertyType.GetGenericArguments().FirstOrDefault();
+            return propertyInfo.PropertyType;
+        }
+
+        protected virtual async Task<IEnumerable<object>> SelectManyFromListVirtual<T, T2>(
+            IQueryable<T> queryable,
+            IEnumerable<string> properties,
+            ServiceReadOptions<T> options)
+        {
+            dynamic queryResult = queryable;
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+
+            var currentType = typeof(T);
+            foreach (var propertyName in properties)
+            {
+                if (queryResult == null) break;
+
+                var (body, param) = PropertyHelper.PropertyFunc(currentType, propertyName,
+                    options.EnablePropertyNesting, options.MaxPropertyNestingLevel, options.EnableDashedProperty);
+
+                var propInfo = PropertyHelper.PropertyInfo(currentType, propertyName, options.EnablePropertyNesting,
+                    options.MaxPropertyNestingLevel, options.EnableDashedProperty);
+                var baseType = BaseType(propInfo);
+
+
+                var method = GetType()
+                    .GetMethod(
+                        PropertyHelper.IsPropertyAList(propInfo)
+                            ? nameof(SelectManyQueryFromListVirtual)
+                            : nameof(SelectQueryFromListVirtual), flags)
+                    ?.MakeGenericMethod(currentType,
+                        baseType);
+
+
+                var parameters = new List<object> {queryResult, body, param};
+
+                var result = method?.Invoke(this, parameters.ToArray());
+                queryResult = result;
+                currentType = baseType;
+            }
+
+            if (queryResult == null) return Enumerable.Empty<object>();
+            return await ((IQueryable<dynamic>) queryResult).ToListAsync();
+        }
+
+        protected virtual IQueryable<TProperty> SelectManyQueryFromListVirtual<T, TProperty>(IQueryable<T> query,
+            Expression body,
+            ParameterExpression param)
+        {
+            var expressionSelect = Expression.Lambda<Func<T, IEnumerable<TProperty>>>(body, param);
+            var selectMany = query.SelectMany(expressionSelect);
+            var selectQuery = SelectQuery(selectMany.AsQueryable());
+            return selectQuery;
+        }
+
+        protected virtual IQueryable<TProperty> SelectQueryFromListVirtual<T, TProperty>(IQueryable<T> query,
+            Expression body,
+            ParameterExpression param)
+        {
+            var expressionSelect = Expression.Lambda<Func<T, TProperty>>(body, param);
+            var selectMany = query.Select(expressionSelect);
+            var selectQuery = SelectQuery(selectMany.AsQueryable());
+            return selectQuery;
+        }
+
+        protected virtual async Task<IEnumerable<TProperty>> SelectManyNotMapped<T, TProperty>(IQueryable<T> set,
+            Expression body,
+            ParameterExpression param)
+        {
+            var expressionSelect = Expression.Lambda<Func<T, IEnumerable<TProperty>>>(body, param);
+            var data = await set.ToListAsync();
+            return data.SelectMany(expressionSelect.Compile());
+        }
+
+        protected virtual async Task<TProperty> SelectOneNotMapped<T, TProperty>(IQueryable<T> set, Expression body,
+            ParameterExpression param)
+        {
+            var expressionSelect = Expression.Lambda<Func<T, TProperty>>(body, param);
+            var data = await set.ToListAsync();
+            return data.Select(expressionSelect.Compile()).FirstOrDefault();
         }
     }
 
