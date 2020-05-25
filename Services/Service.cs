@@ -252,13 +252,7 @@ namespace ApiTools.Services
 
             var createdModels = (await _context.Create(models)).ToList();
 
-            var triggerSave = createdModels.Count > 0;
-            foreach (var createdModel in createdModels)
-            { 
-                triggerSave =  await PostCreate(createdModel);
-            }
-
-            if (triggerSave)
+            if (await PostCreate(createdModels))
             {
                 await _context.Save();
             }
