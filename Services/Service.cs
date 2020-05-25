@@ -550,7 +550,7 @@ namespace ApiTools.Services
         Service<TModel, TModelKeyId, TContext, TModelData> : Service<TModel, TModelKeyId, TContext>,
             IService<TModel, TModelKeyId, TModelData>
         where TContext : IContext<TModel, TModelKeyId>
-        where TModel : DbEntity<TModelKeyId>
+        where TModel : ContextEntity<TModelKeyId>
         where TModelData : class
         where TModelKeyId : new()
     {
