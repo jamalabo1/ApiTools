@@ -11,6 +11,7 @@ using ApiTools.Extensions;
 using ApiTools.Helpers;
 using ApiTools.Models;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Infrastructure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,6 +21,9 @@ namespace ApiTools.Services
         where TModel : ContextEntity<TModelKeyId>
         where TModelKeyId : new()
     {
+        Task<ServiceResponse<TModel>> Create(TModel model);
+        Task<ServiceResponse<IEnumerable<TModel>>> Create(IEnumerable<TModel> models);
+
         Task<ServiceResponse<TModel>> Read(TModelKeyId id,
             ServiceReadOptions<TModel> options = default,
             ContextReadOptions readOptions = default);
@@ -88,9 +92,8 @@ namespace ApiTools.Services
         {
             var read = await Read(id, ServiceReadOptions<TModel>.DisableFilter);
             if (read.Response == null) return ServiceResponse<TModel>.NotFound;
-            var authResp =
-                await _authorization.AuthorizeAsync(_accessor.HttpContext.User, read.Response, Operations.Delete);
-            if (!authResp.Succeeded) return ServiceResponse<TModel>.Forbidden;
+
+            if (!await AuthorizeDelete(read.Response)) return ServiceResponse<TModel>.Forbidden;
 
             await PreDelete(id);
             await _context.Delete(read.Response);
@@ -171,10 +174,8 @@ namespace ApiTools.Services
             var models = await query.ToListAsync();
 
             foreach (var model in models)
-            {
-                var authResp = await _authorization.AuthorizeAsync(_accessor.HttpContext.User, model, Operations.Read);
-                if (!authResp.Succeeded) return ServiceResponse<IEnumerable<TModel>>.Forbidden;
-            }
+                if (!await AuthorizeRead(model))
+                    return ServiceResponse<IEnumerable<TModel>>.Forbidden;
 
             return new ServiceResponse<IEnumerable<TModel>>
             {
@@ -222,6 +223,54 @@ namespace ApiTools.Services
             };
         }
 
+
+        public virtual async Task<ServiceResponse<TModel>> Create(TModel data)
+        {
+            if (!await AuthorizeCreate(data)) return ServiceResponse<TModel>.Forbidden;
+
+            var entity = await _context.Create(data);
+            var triggerSave = await PostCreate(entity);
+            if (triggerSave)
+            {
+                await _context.Save();
+            }
+            return new ServiceResponse<TModel>
+            {
+                Response = entity,
+                Success = true,
+                StatusCode = StatusCodes.Status201Created
+            };
+        }
+
+        public async Task<ServiceResponse<IEnumerable<TModel>>> Create(IEnumerable<TModel> models)
+        {
+            foreach (var model in models)
+            {
+                if (!await AuthorizeCreate(model))
+                    return ServiceResponse<IEnumerable<TModel>>.Forbidden;
+            }
+
+            var createdModels = (await _context.Create(models)).ToList();
+
+            var triggerSave = createdModels.Count > 0;
+            foreach (var createdModel in createdModels)
+            { 
+                triggerSave =  await PostCreate(createdModel);
+            }
+
+            if (triggerSave)
+            {
+                await _context.Save();
+            }
+
+            return new ServiceResponse<IEnumerable<TModel>>
+            {
+                Response = createdModels,
+                Success = true,
+                StatusCode = StatusCodes.Status201Created
+            };
+        }
+
         protected virtual async Task<IQueryable<TModel>> ApplyReadOptions(IQueryable<TModel> query,
             ServiceReadOptions<TModel> options = default)
         {
@@ -241,23 +290,35 @@ namespace ApiTools.Services
             return query;
         }
 
-
-        protected virtual async Task<ServiceResponse<TModel>> Create(TModel data)
+        protected virtual async Task<bool> AuthorizeCreate(TModel data)
         {
-            var authResp =
-                await _authorization.AuthorizeAsync(_accessor.HttpContext.User, data, Operations.Create);
-            if (!authResp.Succeeded) return ServiceResponse<TModel>.Forbidden;
-
-            var entity = await _context.Create(data);
-            await PostCreate(entity);
-            return new ServiceResponse<TModel>
-            {
-                Response = entity,
-                Success = true,
-                StatusCode = StatusCodes.Status201Created
-            };
+            return await AuthorizeOperation(data, Operations.Create);
         }
 
+        protected virtual async Task<bool> AuthorizeUpdate(TModel data)
+        {
+            return await AuthorizeOperation(data, Operations.Update);
+        }
+
+        protected virtual async Task<bool> AuthorizeDelete(TModel data)
+        {
+            return await AuthorizeOperation(data, Operations.Delete);
+        }
+
+
+        protected virtual async Task<bool> AuthorizeRead(TModel data)
+        {
+            return await AuthorizeOperation(data, Operations.Read);
+        }
+
+
+        protected virtual async Task<bool> AuthorizeOperation(TModel data,
+            OperationAuthorizationRequirement requirement)
+        {
+            var authResp =
+                await _authorization.AuthorizeAsync(_accessor.HttpContext.User, data, requirement);
+            return authResp.Succeeded;
+        }
 
         protected virtual async Task<ServiceResponse> Update(TModel data)
         {
@@ -276,8 +337,7 @@ namespace ApiTools.Services
 
         protected virtual async Task<ServiceResponse> UpdateWithoutSave(TModel model)
         {
-            var authResp = await _authorization.AuthorizeAsync(_accessor.HttpContext.User, model, Operations.Update);
-            if (!authResp.Succeeded)
+            if (!await AuthorizeUpdate(model))
             {
                 _context.Detach(model);
                 return ServiceResponse<TModel>.Forbidden;
@@ -312,9 +372,9 @@ namespace ApiTools.Services
             });
         }
 
-        protected virtual Task PostCreate(TModel model)
+        protected virtual Task<bool> PostCreate(TModel model)
         {
-            return Task.CompletedTask;
+            return Task.FromResult(false);
         }
 
         protected virtual Task<IQueryable<TModel>> ApplyFilter(IQueryable<TModel> set)
@@ -322,7 +382,7 @@ namespace ApiTools.Services
             return Task.FromResult(set);
         }
 
-        protected virtual IEnumerable<TProperty>  SelectManyNotMapped<T, TProperty>(IEnumerable<T> set, Expression body,
+        protected virtual IEnumerable<TProperty> SelectManyNotMapped<T, TProperty>(IEnumerable<T> set, Expression body,
             ParameterExpression param)
         {
             var expressionSelect = Expression.Lambda<Func<T, IEnumerable<TProperty>>>(body, param);
@@ -465,7 +525,6 @@ namespace ApiTools.Services
             return await method.InvokeAsync(this, parameters.ToArray());
         }
 
-   
 
         protected virtual async Task<IEnumerable<object>> SelectManyFromListVirtual<T, T2>(
             IQueryable<T> queryable,
@@ -554,24 +613,18 @@ namespace ApiTools.Services
         where TModelData : class
         where TModelKeyId : new()
     {
-        private readonly IHttpContextAccessor _accessor;
-        private readonly IAuthorizationService _authorization;
         private readonly TContext _context;
 
         protected Service(TContext context, IAuthorizationService authorization, IHttpContextAccessor accessor,
             IPagingService pagingService, ISort sort) : base(context, authorization, accessor, pagingService, sort)
         {
             _context = context;
-            _authorization = authorization;
-            _accessor = accessor;
         }
 
         protected Service(TContext context, IAuthorizationService authorization, IHttpContextAccessor accessor,
             IPagingService pagingService) : base(context, authorization, accessor, pagingService)
         {
             _context = context;
-            _authorization = authorization;
-            _accessor = accessor;
         }
 
         public virtual async Task<ServiceResponse<TModel>> Create(TModelData data)
@@ -609,8 +662,9 @@ namespace ApiTools.Services
                 var createRelationResponse = await CreateRelationData(serviceResponse, modelData);
                 if (!createRelationResponse.Success)
                     return ServiceResponse<IEnumerable<TModel>>.FromOtherResponse(createRelationResponse);
+                
                 entities.Add(serviceResponse.Response);
-                triggerSave = createRelationResponse.TriggerSave;
+                triggerSave = await PostCreate(serviceResponse.Response);
             }
 
             if (triggerSave) await _context.Save();
@@ -720,10 +774,10 @@ namespace ApiTools.Services
         {
             var createModelResp = await CreateModel(data);
             if (!createModelResp.Success) return createModelResp;
-            var authResp =
-                await _authorization.AuthorizeAsync(_accessor.HttpContext.User, createModelResp.Response,
-                    Operations.Create);
-            return !authResp.Succeeded ? ServiceResponse<TModel>.Forbidden : createModelResp;
+
+            return !await AuthorizeCreate(createModelResp.Response)
+                ? ServiceResponse<TModel>.Forbidden
+                : createModelResp;
         }
     }
 }
