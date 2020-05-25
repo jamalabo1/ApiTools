@@ -10,8 +10,7 @@ using Microsoft.AspNetCore.Authorization.Infrastructure;
 
 namespace ApiTools.Authorization
 {
-
-    public class AuthorizationInfoContext<TEntityId> 
+    public class AuthorizationInfoContext<TEntityId>
     {
         public string UserRole { get; set; }
         public TEntityId UserId { get; set; }
@@ -31,42 +30,45 @@ namespace ApiTools.Authorization
             (Operations.Read, true)
         };
 
-        public static IEnumerable<Func<TEntity, AuthorizationInfoContext<TEntityId>, Task<bool>>> MatchIdOnly<TEntity,
-            TEntityId>()
+        public static IEnumerable<Func<TEntity, AuthorizationInfoContext<TUserId>, Task<bool>>> MatchIdOnly<TEntity,
+            TEntityId, TUserId>()
             where TEntity : ContextEntity<TEntityId> where TEntityId : new()
         {
             return new[]
             {
-                MatchId<TEntity, TEntityId>()
+                MatchId<TEntity, TEntityId, TUserId>()
             };
         }
 
-        public static Func<TEntity, AuthorizationInfoContext<TEntityId>, Task<bool>> MatchId<TEntity, TEntityId>()
+        public static Func<TEntity, AuthorizationInfoContext<TUserId>, Task<bool>>
+            MatchId<TEntity, TEntityId, TUserId>()
             where TEntity : ContextEntity<TEntityId> where TEntityId : new()
         {
             return (entity, c) => Task.FromResult(entity.Id.Equals(c.UserId));
         }
 
-        public static IAuthorizationRoleRequirement<TEntity, TEntityId> NoDeleteOperationRequirement<TEntity, TEntityId>(
-            IEnumerable<Func<TEntity, AuthorizationInfoContext<TEntityId>, Task<bool>>> requirements = null
+        public static IAuthorizationRoleRequirement<TEntity, TUserId> NoDeleteOperationRequirement<TEntity, TEntityId,
+            TUserId>(
+            IEnumerable<Func<TEntity, AuthorizationInfoContext<TUserId>, Task<bool>>> requirements = null
         ) where TEntity : ContextEntity<TEntityId> where TEntityId : new()
         {
-            requirements ??= MatchIdOnly<TEntity, TEntityId>();
+            requirements ??= MatchIdOnly<TEntity, TEntityId, TUserId>();
 
-            return new AuthorizationRoleRequirement<TEntity, TEntityId>(
+            return new AuthorizationRoleRequirement<TEntity, TUserId>(
                 NoDeleteOperation,
                 requirements,
                 true
             );
         }
 
-        public static IAuthorizationRoleRequirement<TEntity, TEntityId> ReadOnlyOperationRequirement<TEntity, TEntityId>(
-            IEnumerable<Func<TEntity, AuthorizationInfoContext<TEntityId>, Task<bool>>> requirements = null
+        public static IAuthorizationRoleRequirement<TEntity, TUserId> ReadOnlyOperationRequirement<TEntity, TEntityId,
+            TUserId>(
+            IEnumerable<Func<TEntity, AuthorizationInfoContext<TUserId>, Task<bool>>> requirements = null
         ) where TEntity : ContextEntity<TEntityId> where TEntityId : new()
         {
-            requirements ??= MatchIdOnly<TEntity, TEntityId>();
+            requirements ??= MatchIdOnly<TEntity, TEntityId, TUserId>();
 
-            return new AuthorizationRoleRequirement<TEntity, TEntityId>(
+            return new AuthorizationRoleRequirement<TEntity, TUserId>(
                 ReadOnlyOperation,
                 requirements,
                 true
@@ -74,18 +76,18 @@ namespace ApiTools.Authorization
         }
     }
 
-    public interface IAuthorizationRoleRequirement<in TEntity, TEntityId>
+    public interface IAuthorizationRoleRequirement<in TEntity, TUserId>
     {
         IDictionary<OperationAuthorizationRequirement, bool> GetAllowedOperations();
-        IEnumerable<Func<TEntity, AuthorizationInfoContext<TEntityId>, Task<bool>>> GetValidationExpressions();
+        IEnumerable<Func<TEntity, AuthorizationInfoContext<TUserId>, Task<bool>>> GetValidationExpressions();
         bool GetDefaultRoleResult();
     }
 
-    public class AuthorizationRoleRequirement<TEntity, TEntityId> : IAuthorizationRoleRequirement<TEntity, TEntityId>
+    public class AuthorizationRoleRequirement<TEntity, TUserId> : IAuthorizationRoleRequirement<TEntity, TUserId>
     {
         public AuthorizationRoleRequirement(
             IEnumerable<(OperationAuthorizationRequirement, bool)> requirements,
-            IEnumerable<Func<TEntity, AuthorizationInfoContext<TEntityId>, Task<bool>>> validationExpressions,
+            IEnumerable<Func<TEntity, AuthorizationInfoContext<TUserId>, Task<bool>>> validationExpressions,
             bool defaultRoleResult
         )
         {
@@ -94,17 +96,14 @@ namespace ApiTools.Authorization
                 AllowedOperations.Add(operationAuthorizationRequirement, result);
 
             ValidationExpressions = validationExpressions ??
-                                    Enumerable.Empty<Func<TEntity, AuthorizationInfoContext<TEntityId>, Task<bool>>>();
+                                    Enumerable.Empty<Func<TEntity, AuthorizationInfoContext<TUserId>, Task<bool>>>();
             DefaultRoleResult = defaultRoleResult;
         }
 
         private bool DefaultRoleResult { get; }
         private IDictionary<OperationAuthorizationRequirement, bool> AllowedOperations { get; }
 
-        private IEnumerable<Func<TEntity, AuthorizationInfoContext<TEntityId>, Task<bool>>> ValidationExpressions
-        {
-            get;
-        }
+        private IEnumerable<Func<TEntity, AuthorizationInfoContext<TUserId>, Task<bool>>> ValidationExpressions { get; }
 
         public IDictionary<OperationAuthorizationRequirement, bool> GetAllowedOperations()
         {
@@ -116,31 +115,31 @@ namespace ApiTools.Authorization
             return DefaultRoleResult;
         }
 
-        public IEnumerable<Func<TEntity, AuthorizationInfoContext<TEntityId>, Task<bool>>> GetValidationExpressions()
+        public IEnumerable<Func<TEntity, AuthorizationInfoContext<TUserId>, Task<bool>>> GetValidationExpressions()
         {
             return ValidationExpressions;
         }
     }
 
-    public interface IAuthorizationRequirements<in TEntity, TEntityId>
+    public interface IAuthorizationRequirements<in TEntity, TUserId>
     {
-        IAuthorizationRoleRequirement<TEntity, TEntityId> this[string index] { get; }
+        IAuthorizationRoleRequirement<TEntity, TUserId> this[string index] { get; }
     }
 
-    public class AuthorizationRequirements<T, TEntityId> : IAuthorizationRequirements<T, TEntityId>
+    public class AuthorizationRequirements<T, TUserId> : IAuthorizationRequirements<T, TUserId>
     {
-        private readonly IDictionary<string, IAuthorizationRoleRequirement<T, TEntityId>> _requirements;
+        private readonly IDictionary<string, IAuthorizationRoleRequirement<T, TUserId>> _requirements;
 
         public AuthorizationRequirements(
-            IEnumerable<(string, IAuthorizationRoleRequirement<T, TEntityId>)> requirements
+            IEnumerable<(string, IAuthorizationRoleRequirement<T, TUserId>)> requirements
         )
         {
-            _requirements = new Dictionary<string, IAuthorizationRoleRequirement<T, TEntityId>>();
+            _requirements = new Dictionary<string, IAuthorizationRoleRequirement<T, TUserId>>();
             foreach (var (item1, authorizationRoleRequirement) in requirements)
                 _requirements.Add(item1, authorizationRoleRequirement);
         }
 
-        public IAuthorizationRoleRequirement<T, TEntityId> this[string index]
+        public IAuthorizationRoleRequirement<T, TUserId> this[string index]
         {
             get
             {
@@ -151,9 +150,9 @@ namespace ApiTools.Authorization
     }
 
     public abstract class
-        Authorization<TEntity, TEntityId> : AuthorizationHandler<OperationAuthorizationRequirement, TEntity>
+        Authorization<TEntity, TUserId> : AuthorizationHandler<OperationAuthorizationRequirement, TEntity>
     {
-        protected abstract IAuthorizationRequirements<TEntity, TEntityId> AuthorizationRequirements { get; set; }
+        protected abstract IAuthorizationRequirements<TEntity, TUserId> AuthorizationRequirements { get; set; }
 
 
         protected override async Task HandleRequirementAsync(
@@ -182,7 +181,7 @@ namespace ApiTools.Authorization
                         {
                             var userId = GetUserId(context.User);
                             if (!await roleRequirementsValidationExpression(resource,
-                                new AuthorizationInfoContext<TEntityId>
+                                new AuthorizationInfoContext<TUserId>
                                 {
                                     UserId = userId,
                                     UserRole = userRole
@@ -195,6 +194,6 @@ namespace ApiTools.Authorization
             }
         }
 
-        protected abstract TEntityId GetUserId(ClaimsPrincipal user);
+        protected abstract TUserId GetUserId(ClaimsPrincipal user);
     }
 }
