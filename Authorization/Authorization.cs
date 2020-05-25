@@ -47,7 +47,7 @@ namespace ApiTools.Authorization
             return (entity, c) => Task.FromResult(entity.Id.Equals(c.UserId));
         }
 
-        public static AuthorizationRoleRequirement<TEntity, TEntityId> NoDeleteOperationRequirement<TEntity, TEntityId>(
+        public static IAuthorizationRoleRequirement<TEntity, TEntityId> NoDeleteOperationRequirement<TEntity, TEntityId>(
             IEnumerable<Func<TEntity, AuthorizationInfoContext<TEntityId>, Task<bool>>> requirements = null
         ) where TEntity : ContextEntity<TEntityId> where TEntityId : new()
         {
@@ -60,7 +60,7 @@ namespace ApiTools.Authorization
             );
         }
 
-        public static AuthorizationRoleRequirement<TEntity, TEntityId> ReadOnlyOperationRequirement<TEntity, TEntityId>(
+        public static IAuthorizationRoleRequirement<TEntity, TEntityId> ReadOnlyOperationRequirement<TEntity, TEntityId>(
             IEnumerable<Func<TEntity, AuthorizationInfoContext<TEntityId>, Task<bool>>> requirements = null
         ) where TEntity : ContextEntity<TEntityId> where TEntityId : new()
         {
