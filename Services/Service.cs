@@ -17,7 +17,7 @@ using Microsoft.EntityFrameworkCore;
 namespace ApiTools.Services
 {
     public interface IService<TModel, in TModelKeyId>
-        where TModel : DbEntity<TModelKeyId>
+        where TModel : ContextEntity<TModelKeyId>
         where TModelKeyId : new()
     {
         Task<ServiceResponse<TModel>> Read(TModelKeyId id,
@@ -42,7 +42,7 @@ namespace ApiTools.Services
 
     public interface IService<TModel, TModelKeyId, TModelData>
         : IService<TModel, TModelKeyId>
-        where TModel : DbEntity<TModelKeyId>
+        where TModel : ContextEntity<TModelKeyId>
         where TModelKeyId : new()
     {
         Task<ServiceResponse<TModel>> Create(TModelData data);
@@ -55,7 +55,7 @@ namespace ApiTools.Services
     public abstract class
         Service<TModel, TModelKeyId, TContext> : IService<TModel, TModelKeyId>
         where TContext : IContext<TModel, TModelKeyId>
-        where TModel : DbEntity<TModelKeyId>
+        where TModel : ContextEntity<TModelKeyId>
         where TModelKeyId : new()
     {
         private readonly IHttpContextAccessor _accessor;
@@ -455,7 +455,7 @@ namespace ApiTools.Services
                 );
             }
 
-            var baseType = BaseType(propertyInfo);
+            var baseType = PropertyHelper.BaseType(propertyInfo);
 
             if (methodType == null) return null;
             if (baseType == null) return null;
@@ -465,14 +465,7 @@ namespace ApiTools.Services
             return await method.InvokeAsync(this, parameters.ToArray());
         }
 
-        protected virtual Type BaseType(PropertyInfo propertyInfo)
-        {
-            if (propertyInfo.PropertyType.IsArray)
-                return propertyInfo.PropertyType.GetElementType();
-            if (PropertyHelper.IsPropertyAList(propertyInfo))
-                return propertyInfo.PropertyType.GetGenericArguments().FirstOrDefault();
-            return propertyInfo.PropertyType;
-        }
+   
 
         protected virtual async Task<IEnumerable<object>> SelectManyFromListVirtual<T, T2>(
             IQueryable<T> queryable,
@@ -492,7 +485,7 @@ namespace ApiTools.Services
 
                 var propInfo = PropertyHelper.PropertyInfo(currentType, propertyName, options.EnablePropertyNesting,
                     options.MaxPropertyNestingLevel, options.EnableDashedProperty);
-                var baseType = BaseType(propInfo);
+                var baseType = PropertyHelper.BaseType(propInfo);
 
 
                 var method = GetType()

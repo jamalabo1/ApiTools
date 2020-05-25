@@ -165,5 +165,13 @@ namespace ApiTools.Helpers
 
             return (body, param);
         }
+        public static Type BaseType(PropertyInfo propertyInfo)
+        {
+            if (propertyInfo.PropertyType.IsArray)
+                return propertyInfo.PropertyType.GetElementType();
+            if (IsPropertyAList(propertyInfo))
+                return propertyInfo.PropertyType.GetGenericArguments().FirstOrDefault();
+            return propertyInfo.PropertyType;
+        }
     }
 }

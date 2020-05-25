@@ -122,9 +122,9 @@ namespace ApiTools.Authorization
         }
     }
 
-    public interface IAuthorizationRequirements<T, TEntityId>
+    public interface IAuthorizationRequirements<in TEntity, TEntityId>
     {
-        IAuthorizationRoleRequirement<T, TEntityId> this[string index] { get; }
+        IAuthorizationRoleRequirement<TEntity, TEntityId> this[string index] { get; }
     }
 
     public class AuthorizationRequirements<T, TEntityId> : IAuthorizationRequirements<T, TEntityId>
