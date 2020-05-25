@@ -376,6 +376,11 @@ namespace ApiTools.Services
         {
             return Task.FromResult(false);
         }
+        protected virtual Task<bool> PostCreate(IEnumerable<TModel> models)
+        {
+            return Task.FromResult(false);
+        }
+
 
         protected virtual Task<IQueryable<TModel>> ApplyFilter(IQueryable<TModel> set)
         {
@@ -664,10 +669,9 @@ namespace ApiTools.Services
                     return ServiceResponse<IEnumerable<TModel>>.FromOtherResponse(createRelationResponse);
                 
                 entities.Add(serviceResponse.Response);
-                triggerSave = await PostCreate(serviceResponse.Response);
             }
 
-            if (triggerSave) await _context.Save();
+            if (await PostCreate(entities) || triggerSave) await _context.Save();
 
             return new ServiceResponse<IEnumerable<TModel>>
             {
