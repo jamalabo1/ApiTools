@@ -9,6 +9,20 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ApiTools.Controllers
 {
+    public static class SuperController
+    {
+        public static IActionResult GenerateResult<T>(ServiceResponse<T> response)
+        {
+            if (!response.Success && response.Response == null && response.Messages.Count == 0)
+                return new StatusCodeResult(response.StatusCode);
+            var result = new ObjectResult(response)
+            {
+                StatusCode = response.StatusCode
+            };
+            return result;
+        }
+    }
+
     [ApiController]
     public abstract class SuperController<TModel, TModelKeyId, TService> : Controller
         where TModel : DbEntity<TModelKeyId>
@@ -36,7 +50,7 @@ namespace ApiTools.Controllers
             if (rolesResponse != null) return rolesResponse;
 
             var response = await Service.Read();
-            return GenerateResult(response);
+            return GenerateActionResult(response);
         }
 
         [HttpGet]
@@ -48,7 +62,7 @@ namespace ApiTools.Controllers
 
 
             var response = await Service.Read(id);
-            return GenerateResult(response);
+            return GenerateActionResult(response);
         }
 
         // [HttpGet]
@@ -58,7 +72,7 @@ namespace ApiTools.Controllers
         //     var rolesResponse = CheckUserRoles(GetResource_Roles());
         //     if (rolesResponse != null) return rolesResponse;
         //     var response = await Service.Read(id, field);
-        //     return GenerateResult(response);
+        //     return GenerateActionResult(response);
         // }
 
 
@@ -70,11 +84,11 @@ namespace ApiTools.Controllers
             if (rolesResponse != null) return rolesResponse;
 
             var response = await Service.Delete(id);
-            return GenerateResult(response);
+            return GenerateActionResult(response);
         }
 
         [HttpDelete]
-        [Route("/bulk")]
+        [Route("bulk")]
         public virtual async Task<IActionResult> DeleteResources([FromRoute] IEnumerable<TModelKeyId> ids)
         {
             var rolesResponse = CheckUserRoles(DeleteResources_Roles());
@@ -82,7 +96,7 @@ namespace ApiTools.Controllers
 
 
             var response = await Service.Delete(ids);
-            return GenerateResult(response);
+            return GenerateActionResult(response);
         }
 
 
@@ -92,48 +106,43 @@ namespace ApiTools.Controllers
         {
             var rolesResponse = CheckUserRoles(GetResourceField_Roles());
             if (rolesResponse != null) return rolesResponse;
-            
+
             var response = await Service.Read(id, field);
-            return Ok(response.Response);
-        }
-        
-        protected virtual IActionResult GenerateResult(ServiceResponse response)
-        {
-            if (!response.Success) return GenerateResponseMessages(response.StatusCode, response.Messages);
-
-            return StatusCode(response.StatusCode);
+            return GenerateActionResult(response);
         }
 
-        protected virtual IActionResult GenerateResult<T>(ServiceResponse<T> response)
+        [HttpGet]
+        [Route("{id}/{field}/{fieldId}")]
+        public virtual async Task<IActionResult> GetResourceArrayFieldItem([FromRoute] TModelKeyId id,
+            [FromRoute] string field, [FromRoute] long fieldId)
         {
-            if (!response.Success) return GenerateResponseMessages(response.StatusCode, response.Messages);
+            var rolesResponse = CheckUserRoles(GetResourceField_Roles());
+            if (rolesResponse != null) return rolesResponse;
 
-            return StatusCode(response.StatusCode, response.Response);
+            var response = await Service.Read(id, field, fieldId);
+            return GenerateActionResult(response);
         }
 
-        protected virtual IActionResult GenerateResult(ServiceResponse<TModel> response)
+        protected virtual IActionResult GenerateActionResult(ServiceResponse response)
         {
-            if (!response.Success) return GenerateResponseMessages(response.StatusCode, response.Messages);
-
-            return GenerateActionResult(response.StatusCode, response.Response);
+            if (!response.Success && response.Messages.Count == 0) return StatusCode(response.StatusCode);
+            return StatusCode(response.StatusCode, response);
         }
 
-        protected virtual IActionResult GenerateResult(ServiceResponse<PagingServiceResponse<TModel>> response)
+        protected virtual IActionResult GenerateActionResult<T>(ServiceResponse<T> response)
         {
-            if (!response.Success) return GenerateResponseMessages(response.StatusCode, response.Messages);
+            return SuperController.GenerateResult(response);
+        }
 
-            return GenerateActionResult(response.StatusCode, response.Response);
+
+        protected virtual IActionResult GenerateActionResult(ServiceResponse<PagingServiceResponse<TModel>> response)
+        {
+            return GenerateActionResult(response.StatusCode, response);
         }
 
         protected virtual IActionResult GenerateActionResult(int statusCode, object value)
         {
             return StatusCode(statusCode, value);
-        }
-
-        protected virtual IActionResult GenerateResponseMessages(int statusCode,
-            IEnumerable<IServiceResponseMessage> messages)
-        {
-            return StatusCode(statusCode, messages);
         }
 
         protected virtual RouteRules CreateResource_Roles()
@@ -202,7 +211,7 @@ namespace ApiTools.Controllers
 
 
             var response = await Service.Create(data);
-            return GenerateResult(response);
+            return GenerateActionResult(response);
         }
 
         [HttpPost]
@@ -214,7 +223,7 @@ namespace ApiTools.Controllers
 
 
             var response = await Service.Create(data);
-            return GenerateResult(response);
+            return GenerateActionResult(response);
         }
 
         [HttpPut]
@@ -226,7 +235,7 @@ namespace ApiTools.Controllers
 
 
             var response = await Service.Update(id, data);
-            return GenerateResult(response);
+            return GenerateActionResult(response);
         }
 
         [HttpPut]
@@ -239,7 +248,7 @@ namespace ApiTools.Controllers
 
 
             var response = await Service.Update(bulkUpdateModels);
-            return GenerateResult(response);
+            return GenerateActionResult(response);
         }
     }
 }

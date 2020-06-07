@@ -7,6 +7,6 @@ namespace ApiTools.Models
         public string Token { get; set; }
         public string Role { get; set; }
         public string Status => "ok";
-        public Guid AccountId { get; set; }
+        public string AccountId { get; set; }
     }
 }

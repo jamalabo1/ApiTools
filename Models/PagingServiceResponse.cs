@@ -1,4 +1,5 @@
-﻿﻿using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using System.Linq;
 
 namespace ApiTools.Models
 {
@@ -9,5 +10,16 @@ namespace ApiTools.Models
         public int CurrentSize { get; set; }
         public int Page { get; set; }
         public int PerPage { get; set; }
+
+        public static PagingServiceResponse<T> Empty()
+        {
+            return new PagingServiceResponse<T>
+            {
+                Page = 0,
+                Size = 0,
+                PerPage = 0,
+                Data = Enumerable.Empty<T>()
+            };
+        }
     }
-} 
+}

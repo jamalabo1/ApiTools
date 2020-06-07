@@ -80,27 +80,28 @@ namespace ApiTools.Authorization
     {
         IDictionary<OperationAuthorizationRequirement, bool> GetAllowedOperations();
         IEnumerable<Func<TEntity, AuthorizationInfoContext<TUserId>, Task<bool>>> GetValidationExpressions();
-        bool GetDefaultRoleResult();
+        bool GetDefaultRoleRequirementResult();
     }
 
     public class AuthorizationRoleRequirement<TEntity, TUserId> : IAuthorizationRoleRequirement<TEntity, TUserId>
     {
         public AuthorizationRoleRequirement(
-            IEnumerable<(OperationAuthorizationRequirement, bool)> requirements,
-            IEnumerable<Func<TEntity, AuthorizationInfoContext<TUserId>, Task<bool>>> validationExpressions,
-            bool defaultRoleResult
+            IEnumerable<(OperationAuthorizationRequirement, bool)> requirements = null,
+            IEnumerable<Func<TEntity, AuthorizationInfoContext<TUserId>, Task<bool>>> validationExpressions = null,
+            bool defaultRoleRequirementResult = false
         )
         {
             AllowedOperations = new Dictionary<OperationAuthorizationRequirement, bool>();
-            foreach (var (operationAuthorizationRequirement, result) in requirements)
-                AllowedOperations.Add(operationAuthorizationRequirement, result);
+            if (requirements != null)
+                foreach (var (operationAuthorizationRequirement, result) in requirements)
+                    AllowedOperations.Add(operationAuthorizationRequirement, result);
 
             ValidationExpressions = validationExpressions ??
                                     Enumerable.Empty<Func<TEntity, AuthorizationInfoContext<TUserId>, Task<bool>>>();
-            DefaultRoleResult = defaultRoleResult;
+            DefaultRoleRequirementResult = defaultRoleRequirementResult;
         }
 
-        private bool DefaultRoleResult { get; }
+        private bool DefaultRoleRequirementResult { get; }
         private IDictionary<OperationAuthorizationRequirement, bool> AllowedOperations { get; }
 
         private IEnumerable<Func<TEntity, AuthorizationInfoContext<TUserId>, Task<bool>>> ValidationExpressions { get; }
@@ -110,9 +111,9 @@ namespace ApiTools.Authorization
             return AllowedOperations;
         }
 
-        public bool GetDefaultRoleResult()
+        public bool GetDefaultRoleRequirementResult()
         {
-            return DefaultRoleResult;
+            return DefaultRoleRequirementResult;
         }
 
         public IEnumerable<Func<TEntity, AuthorizationInfoContext<TUserId>, Task<bool>>> GetValidationExpressions()
@@ -172,7 +173,7 @@ namespace ApiTools.Authorization
             {
                 var roleRequirementExists = roleRequirements.GetAllowedOperations().ContainsKey(requirement);
 
-                if (!roleRequirementExists && roleRequirements.GetDefaultRoleResult() ||
+                if (!roleRequirementExists && roleRequirements.GetDefaultRoleRequirementResult() ||
                     roleRequirementExists && roleRequirements.GetAllowedOperations()[requirement])
                 {
                     if (roleRequirements.GetValidationExpressions() != null)

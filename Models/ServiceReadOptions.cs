@@ -16,7 +16,7 @@ namespace ApiTools.Models
 
         public bool Filter { get; set; } = true;
         public bool Sort { get; set; } = true;
-
+        public long? SelectFieldEntityId = null;
 
         public IEnumerable<Expression<Func<TModel, dynamic>>> Includes { get; set; }
     }

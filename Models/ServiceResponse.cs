@@ -1,47 +1,68 @@
 ﻿using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Http;
+using Newtonsoft.Json;
 
 namespace ApiTools.Models
 {
     public class ServiceResponse
     {
-        public bool Success = true;
-        public bool TriggerSave { get; set; } = true;
+        public bool Success { get; set; }
+
+        [System.Text.Json.Serialization.JsonIgnore] public bool TriggerSave { get; set; } = true;
+
+        [JsonPropertyName("status")] 
+        [JsonProperty("status")]
         public int StatusCode { get; set; }
 
-        public IEnumerable<IServiceResponseMessage> Messages { get; set; }
-    }
-
-    public interface IServiceResponseMessage
-    {
-        
-    }
-
-    public class ServiceResponseMessage : IServiceResponseMessage
-    {
-        public string Message { get; set; }
-        public string Code { get; set; }
+        public IList<ServiceResponseMessage> Messages { get; set; } =
+            ImmutableList<ServiceResponseMessage>.Empty;
     }
 
     public class ServiceResponse<T> : ServiceResponse
     {
-        public static readonly ServiceResponse<T> Ok = new ServiceResponse<T> {StatusCode = 200, Success = true};
+        public static readonly ServiceResponse<T> Ok = new ServiceResponse<T>
+        {
+            StatusCode = StatusCodes.Status200OK,
+            Success = true
+        };
 
         public static readonly ServiceResponse<T> NoContent = new ServiceResponse<T>
-            {StatusCode = 204, Success = false};
+        {
+            StatusCode = StatusCodes.Status204NoContent,
+            Success = false
+        };
 
         public static readonly ServiceResponse<T> BadRequest = new ServiceResponse<T>
-            {StatusCode = 400, Success = false};
+        {
+            StatusCode = StatusCodes.Status400BadRequest,
+            Success = false
+        };
 
         public static readonly ServiceResponse<T> UnAuthorized = new ServiceResponse<T>
-            {StatusCode = 401, Success = false};
+        {
+            StatusCode = StatusCodes.Status401Unauthorized,
+            Success = false
+        };
 
         public static readonly ServiceResponse<T> Forbidden = new ServiceResponse<T>
-            {StatusCode = 403, Success = false};
+        {
+            StatusCode = StatusCodes.Status403Forbidden,
+            Success = false
+        };
 
-        public static readonly ServiceResponse<T> NotFound = new ServiceResponse<T> {StatusCode = 404, Success = false};
+        public static readonly ServiceResponse<T> NotFound = new ServiceResponse<T>
+        {
+            StatusCode = StatusCodes.Status404NotFound,
+            Success = false
+        };
 
         public static readonly ServiceResponse<T> InternalServerError = new ServiceResponse<T>
-            {StatusCode = 500, Success = false};
+        {
+            StatusCode = StatusCodes.Status500InternalServerError,
+            Success = false
+        };
 
 
         public T Response { get; set; }
@@ -49,8 +70,13 @@ namespace ApiTools.Models
 
         public static ServiceResponse<T> FromOtherResponse<TOther>(ServiceResponse<TOther> otherResponse)
         {
-            var response = (ServiceResponse) otherResponse;
+            ServiceResponse response = otherResponse;
             return (ServiceResponse<T>) response;
+        }
+
+        public static ServiceResponse<T> FromOtherResponse(ServiceResponse otherResponse)
+        {
+            return (ServiceResponse<T>) otherResponse;
         }
     }
 }

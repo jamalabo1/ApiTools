@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using System.Threading.Tasks;
 using ApiTools.Models;
 using Microsoft.AspNetCore.Http;
@@ -17,6 +18,7 @@ namespace ApiTools.Services
         private int _limit = 100;
         private int _page = 1;
         private int _size;
+        private bool _countTotal = true;
 
         public PagingService(IHttpContextAccessor accessor)
         {
@@ -36,9 +38,20 @@ namespace ApiTools.Services
             if (pageValue.Count > 0) int.TryParse(pageValue, out _page);
             var limitValue = httpQuery.LastOrDefault(x => x.Key == "limit").Value;
             if (limitValue.Count > 0) int.TryParse(limitValue, out _limit);
+            var countTotalValue = httpQuery.LastOrDefault(x => x.Key == "total").Value;
+            if (!string.IsNullOrEmpty(countTotalValue))
+            {
+                bool.TryParse(countTotalValue, out _countTotal);
+            }
+
             if (_limit > 1000 || _limit <= 0) _limit = 1000;
             if (_page <= 0) _page = 1;
-            _size = await set.CountAsync();
+
+            if (_countTotal)
+            {
+                _size = await set.CountAsync();
+            }
+
             if (_page > 1) set = set.Skip((_page - 1) * _limit);
             set = set.Take(_limit);
 
