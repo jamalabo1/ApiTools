@@ -47,6 +47,8 @@ namespace ApiTools.Services
             long fieldId,
             ServiceReadOptions<TModel> options = default,
             ContextReadOptions readOptions = default);
+        
+        Task<ServiceResponse> Update(TModel model);
     }
 
     public interface IService<TModel, TModelKeyId, TModelData>
@@ -349,7 +351,7 @@ namespace ApiTools.Services
             return authResp.Succeeded;
         }
 
-        protected virtual async Task<ServiceResponse> Update(TModel data)
+        public virtual async Task<ServiceResponse> Update(TModel data)
         {
             await UpdateWithoutSave(data);
             await _context.Save();
