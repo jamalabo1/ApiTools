@@ -3,8 +3,10 @@ using System.Linq;
 using System.Threading.Tasks;
 using ApiTools.Models;
 using ApiTools.Services;
+using AutoMapper;
 using JetBrains.Annotations;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ApiTools.Controllers
@@ -13,7 +15,8 @@ namespace ApiTools.Controllers
     {
         public static IActionResult GenerateResult<T>(ServiceResponse<T> response)
         {
-            if (!response.Success && response.Response == null && response.Messages.Count == 0)
+            if (response.StatusCode == StatusCodes.Status204NoContent ||
+                !response.Success && response.Response == null && response.Messages.Count == 0)
                 return new StatusCodeResult(response.StatusCode);
             var result = new ObjectResult(response)
             {
@@ -30,6 +33,8 @@ namespace ApiTools.Controllers
         where TModelKeyId : new()
     {
         protected abstract TService Service { get; }
+
+        protected virtual IMapper Mapper { get; set; }
 
         [CanBeNull]
         protected IActionResult CheckUserRoles(RouteRules routeRules)
@@ -123,6 +128,7 @@ namespace ApiTools.Controllers
             return GenerateActionResult(response);
         }
 
+
         protected virtual IActionResult GenerateActionResult(ServiceResponse response)
         {
             if (!response.Success && response.Messages.Count == 0) return StatusCode(response.StatusCode);
@@ -190,6 +196,12 @@ namespace ApiTools.Controllers
             return DeleteResource_Roles();
         }
 
+
+        protected virtual RouteRules UpdatePartialResource_Roles()
+        {
+            return UpdateResource_Roles();
+        }
+
         protected virtual RouteRules DefaultShared_Roles()
         {
             return null;
@@ -201,6 +213,7 @@ namespace ApiTools.Controllers
         where TModel : DbEntity<TModelKeyId>
         where TService : IService<TModel, TModelKeyId, TModelData>
         where TModelKeyId : new()
+        where TModelData : class
     {
         [HttpPost]
         [Route("")]
@@ -249,6 +262,34 @@ namespace ApiTools.Controllers
 
             var response = await Service.Update(bulkUpdateModels);
             return GenerateActionResult(response);
+        }
+
+
+        [HttpPatch("{id}")]
+        public virtual async Task<IActionResult> Patch([FromRoute] TModelKeyId id,
+            [FromBody] JsonPatchDocument<TModelData> dataPatch)
+        {
+            if (Mapper == null) return GenerateActionResult(404, null);
+            var rolesResponse = CheckUserRoles(UpdatePartialResource_Roles());
+            if (rolesResponse != null) return rolesResponse;
+
+            var response = await Service.Read(id);
+            if (!response.Success) return GenerateActionResult(response);
+            var model = response.Response;
+
+
+            var modelDto = Mapper.Map<TModelData>(model);
+
+            dataPatch.ApplyTo(modelDto);
+
+
+            if (!ModelState.IsValid) return new BadRequestObjectResult(ModelState);
+
+            Mapper.Map(modelDto, model);
+
+            var updateResponse = await Service.Update(model);
+
+            return GenerateActionResult(updateResponse);
         }
     }
 }

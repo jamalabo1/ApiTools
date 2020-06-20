@@ -31,7 +31,7 @@ namespace ApiTools.Models
         public static readonly ServiceResponse<T> NoContent = new ServiceResponse<T>
         {
             StatusCode = StatusCodes.Status204NoContent,
-            Success = false
+            Success = true
         };
 
         public static readonly ServiceResponse<T> BadRequest = new ServiceResponse<T>

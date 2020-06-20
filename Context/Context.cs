@@ -52,7 +52,7 @@ namespace ApiTools.Context
         Task Save();
     }
 
-    public abstract class Context<TModel, TModelKeyId> : IContext<TModel, TModelKeyId>
+    public class Context<TModel, TModelKeyId> : IContext<TModel, TModelKeyId>
         where TModel : ContextEntity<TModelKeyId> where TModelKeyId : new()
     {
         private static readonly Type ModelKeyIdType = typeof(TModelKeyId);
@@ -61,6 +61,12 @@ namespace ApiTools.Context
         protected Context(IDbContext context)
         {
             _context = context;
+        }
+
+        public Context(IDbContext context, IQueryable<TModel> setQuery)
+        {
+            _context = context;
+            SetQuery = setQuery;
         }
 
         protected virtual IQueryable<TModel> SetQuery { get; set; }
@@ -266,7 +272,10 @@ namespace ApiTools.Context
 
         public virtual void Detach(TModel entity)
         {
-            _context.Entry(entity).State = EntityState.Detached;
+            if (entity != null)
+            {
+                _context.Entry(entity).State = EntityState.Detached;
+            }
         }
 
         public virtual async Task Save()

@@ -32,5 +32,6 @@ namespace ApiTools.Context
             CancellationToken cancellationToken = default);
 
         Task AddRangeAsync([NotNull] params object[] entities);
+        EntityEntry Add([NotNull] object entity);
     }
 }

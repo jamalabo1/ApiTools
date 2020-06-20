@@ -10,6 +10,7 @@ using ApiTools.Context;
 using ApiTools.Extensions;
 using ApiTools.Helpers;
 using ApiTools.Models;
+using AutoMapper;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Infrastructure;
 using Microsoft.AspNetCore.Http;
@@ -47,7 +48,7 @@ namespace ApiTools.Services
             long fieldId,
             ServiceReadOptions<TModel> options = default,
             ContextReadOptions readOptions = default);
-        
+
         Task<ServiceResponse> Update(TModel model);
     }
 
@@ -296,6 +297,21 @@ namespace ApiTools.Services
             };
         }
 
+        public virtual async Task<ServiceResponse> Update(TModel data)
+        {
+            await UpdateWithoutSave(data);
+            await _context.Save();
+            var postUpdateResp = await PostUpdate(data);
+            if (postUpdateResp.TriggerSave)
+                await _context.Save();
+
+            return new ServiceResponse
+            {
+                Success = true,
+                StatusCode = StatusCodes.Status204NoContent
+            };
+        }
+
         protected virtual async Task AfterBulkCreate(IEnumerable<TModel> models)
         {
             var createdModels = (await _context.Create(models)).ToList();
@@ -349,21 +365,6 @@ namespace ApiTools.Services
             var authResp =
                 await _authorization.AuthorizeAsync(_accessor.HttpContext.User, data, requirement);
             return authResp.Succeeded;
-        }
-
-        public virtual async Task<ServiceResponse> Update(TModel data)
-        {
-            await UpdateWithoutSave(data);
-            await _context.Save();
-            var postUpdateResp = await PostUpdate(data);
-            if (postUpdateResp.TriggerSave)
-                await _context.Save();
-
-            return new ServiceResponse
-            {
-                Success = true,
-                StatusCode = StatusCodes.Status204NoContent
-            };
         }
 
         protected virtual async Task<ServiceResponse> UpdateWithoutSave(TModel model)
@@ -537,16 +538,14 @@ namespace ApiTools.Services
                         if (PropertyHelper.IsPropertyAList(propertyInfo))
                         {
                             if (propertyInfo.PropertyType.IsSubclassOf(typeof(DbEntity<>)))
-                            {
                                 methodType = GetType().GetMethod(nameof(SelectManyVirtual), flags);
-                            }
                             else
-                            {
                                 methodType = GetType().GetMethod(nameof(SelectContextManyVirtual), flags);
-                            }
                         }
                         else
+                        {
                             methodType = GetType().GetMethod(nameof(SelectOneVirtual), flags);
+                        }
                     }
                     else
                     {
@@ -572,12 +571,9 @@ namespace ApiTools.Services
             else
             {
                 methodType = GetType().GetMethod(nameof(SelectManyFromListVirtual), flags);
-                parameters.AddRange(
-                    new object[]
-                    {
-                        PropertyHelper.AccessPropertyFromName(propertyName, options.EnablePropertyNesting,
-                            options.MaxPropertyNestingLevel, options.EnableDashedProperty)
-                    }
+                parameters.Add(
+                    PropertyHelper.AccessPropertyFromName(propertyName, options.EnablePropertyNesting,
+                        options.MaxPropertyNestingLevel, options.EnableDashedProperty)
                 );
             }
 
@@ -626,7 +622,7 @@ namespace ApiTools.Services
                         baseType);
 
 
-                var parameters = new List<object> {queryResult, body, param};
+                var parameters = new List<object> {queryResult, body, param, options};
 
                 var result = method?.Invoke(this, parameters.ToArray());
                 queryResult = result;
@@ -648,7 +644,8 @@ namespace ApiTools.Services
             return selectQuery;
         }
 
-        protected virtual IQueryable<TProperty> SelectQueryFromListVirtual<T, TProperty>(IQueryable<T> query,
+        protected virtual IQueryable<TProperty> SelectQueryFromListVirtual<T, TProperty>(
+            IQueryable<T> query,
             Expression body,
             ParameterExpression param,
             ServiceReadOptions<T> options)
@@ -688,17 +685,22 @@ namespace ApiTools.Services
         where TModelKeyId : new()
     {
         private readonly TContext _context;
+        private readonly IMapper _mapper;
 
         protected Service(TContext context, IAuthorizationService authorization, IHttpContextAccessor accessor,
-            IPagingService pagingService, ISort sort) : base(context, authorization, accessor, pagingService, sort)
+            IPagingService pagingService, ISort sort, IMapper mapper) : base(context, authorization, accessor,
+            pagingService, sort)
         {
             _context = context;
+            _mapper = mapper;
         }
 
-        protected Service(TContext context, IAuthorizationService authorization, IHttpContextAccessor accessor,
-            IPagingService pagingService) : base(context, authorization, accessor, pagingService)
+        protected Service(TContext context, IAuthorizationService authorization,
+            IHttpContextAccessor accessor,
+            IPagingService pagingService, IMapper mapper) : base(context, authorization, accessor, pagingService)
         {
             _context = context;
+            _mapper = mapper;
         }
 
         public virtual async Task<ServiceResponse<TModel>> Create(TModelData data)
@@ -866,8 +868,8 @@ namespace ApiTools.Services
         {
             return Task.FromResult(new ServiceResponse<TModel>
             {
-                Success = false,
-                Response = default,
+                Success = true,
+                Response = _mapper.Map<TModel>(data),
                 StatusCode = StatusCodes.Status500InternalServerError,
                 TriggerSave = false
             });
@@ -877,8 +879,8 @@ namespace ApiTools.Services
         {
             return Task.FromResult(new ServiceResponse<TModel>
             {
-                Success = false,
-                Response = default,
+                Success = true,
+                Response = _mapper.Map(data, model),
                 StatusCode = StatusCodes.Status500InternalServerError,
                 TriggerSave = false
             });
@@ -892,6 +894,22 @@ namespace ApiTools.Services
             return !await AuthorizeCreate(createModelResp.Response)
                 ? ServiceResponse<TModel>.Forbidden
                 : createModelResp;
+        }
+    }
+
+    public class
+        InternalService<TModel, TModelKeyId, TModelData> : Service<TModel, TModelKeyId, IContext<TModel, TModelKeyId>, TModelData>,
+            IService<TModel, TModelKeyId, TModelData>
+        where TModel : ContextEntity<TModelKeyId>
+        where TModelData : class
+        where TModelKeyId : new()
+    {
+        public InternalService(IContext<TModel, TModelKeyId> context, IAuthorizationService authorization, IHttpContextAccessor accessor, IPagingService pagingService, ISort sort, IMapper mapper) : base(context, authorization, accessor, pagingService, sort, mapper)
+        {
+        }
+
+        public InternalService(IContext<TModel, TModelKeyId> context, IAuthorizationService authorization, IHttpContextAccessor accessor, IPagingService pagingService, IMapper mapper) : base(context, authorization, accessor, pagingService, mapper)
+        {
         }
     }
 }

@@ -10,7 +10,12 @@ namespace ApiTools.Services
     public interface IAuthenticationService
     {
         Task<ServiceResponse<LoginResponse>> Authenticate<TModel, TModelId>(
-            IContext<TModel, TModelId> context, Expression<Func<TModel, bool>> expression, string password, string role)
+            IContext<TModel, TModelId> context,
+            Expression<Func<TModel, bool>> expression,
+            string password,
+            string role,
+            Func<TModel, ServiceResponse<LoginResponse>> validate = default
+        )
             where TModel : AccountDbEntity<TModelId> where TModelId : new();
     }
 
@@ -27,8 +32,13 @@ namespace ApiTools.Services
 
 
         public async Task<ServiceResponse<LoginResponse>> Authenticate<TModel, TModelId>(
-            IContext<TModel, TModelId> context, Expression<Func<TModel, bool>> expression, string password, string role)
-            where TModel : AccountDbEntity<TModelId> where TModelId : new()
+            IContext<TModel, TModelId> context,
+            Expression<Func<TModel, bool>> expression,
+            string password,
+            string role,
+            Func<TModel, ServiceResponse<LoginResponse>> validate = default)
+            where TModel : AccountDbEntity<TModelId>
+            where TModelId : new()
         {
             var entity =
                 await context.FindOne(
@@ -50,6 +60,12 @@ namespace ApiTools.Services
                     Success = false
                 };
 
+            if (validate != default)
+            {
+                var validationResponse = validate(entity);
+                if (!validationResponse.Success) return validationResponse;
+            }
+
             if (!_passwordService.ValidatePassword(password, entity.Password))
                 return new ServiceResponse<LoginResponse>
                 {
@@ -60,7 +76,7 @@ namespace ApiTools.Services
                         {
                             Code = "authentication.authenticate.password-mismatch",
                             Message = "The entered password does not match.",
-                            Type = MessageType.Error,
+                            Type = MessageType.Error
                         }
                     },
                     Success = false
@@ -76,7 +92,7 @@ namespace ApiTools.Services
             {
                 Token = token,
                 Role = role,
-                AccountId = accountId.ToString(),
+                AccountId = accountId.ToString()
             };
             return new ServiceResponse<LoginResponse>
             {

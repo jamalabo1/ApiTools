@@ -100,9 +100,12 @@ namespace ApiTools.Helpers
                         return true;
                     propInfo = propInfo.PropertyType.GetProperty(p, flags);
                 }
-            }
-
-            return false;
+                else
+                {
+                    if (IsPropertyAList(propInfo)) return true;
+                }
+            } 
+            return IsPropertyAList(propInfo);
         }
 
         public static bool IsPropertyAList(PropertyInfo propertyInfo)

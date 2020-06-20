@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Formatting;
 using System.Net.Http.Headers;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.JsonPatch;
 using Newtonsoft.Json;
 
 namespace ApiTools.AzureServices
@@ -13,13 +15,25 @@ namespace ApiTools.AzureServices
         Task<HttpResponseMessage> Put<T>(string path, T data);
         Task<string> Get(string path);
         Task<T> Get<T>(string path);
+        Task<string> Patch<T>(string path, JsonPatchDocument<T> data) where T : class;
 
         void SetBearerAuthorizationToken(string authorizationToken);
         void SetAuthorizationToken(string authorizationToken);
     }
+    
+    public static class HttpClientExtension
+    {
+        public static Task<HttpResponseMessage> PatchAsJsonAsync<T>(this HttpClient client, string requestUri, T value)
+        {
+            var content = new ObjectContent<T>(value, new JsonMediaTypeFormatter());
+            var request = new HttpRequestMessage(new HttpMethod("PATCH"), requestUri) { Content = content };
 
+            return client.SendAsync(request);
+        }
+    }
     public class ApiRequestsService : IApiRequestsService
     {
+        
         private readonly string _apiUrl;
         private readonly HttpClient _httpClient;
 
@@ -33,6 +47,12 @@ namespace ApiTools.AzureServices
         public async Task<string> Post<T>(string path, T data)
         {
             var response = await _httpClient.PostAsJsonAsync(ApiPath(path), data);
+            var result = await response.Content.ReadAsStringAsync();
+            return result;
+        }
+        public async Task<string> Patch<T>(string path, JsonPatchDocument<T> data) where T : class
+        {
+            var response = await _httpClient.PatchAsJsonAsync(ApiPath(path), data);
             var result = await response.Content.ReadAsStringAsync();
             return result;
         }
