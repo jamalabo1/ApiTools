@@ -4,9 +4,9 @@ using System.Linq.Expressions;
 
 namespace ApiTools.Models
 {
-    public class ServiceReadOptions<TModel>
+    public class ServiceOptions<TModel>
     {
-        public static readonly ServiceReadOptions<TModel> DisableFilter = new ServiceReadOptions<TModel>
+        public static readonly ServiceOptions<TModel> DisableFilter = new ServiceOptions<TModel>
             {Filter = false};
 
         public bool EnableDashedProperty = true;
@@ -17,6 +17,8 @@ namespace ApiTools.Models
         public bool Filter { get; set; } = true;
         public bool Sort { get; set; } = true;
         public long? SelectFieldEntityId = null;
+
+        public ContextOptions ContextOptions { get; set; }
 
         public IEnumerable<Expression<Func<TModel, dynamic>>> Includes { get; set; }
     }

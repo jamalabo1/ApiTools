@@ -116,6 +116,9 @@ namespace ApiTools.Controllers
             return GenerateActionResult(response);
         }
 
+
+     
+        
         [HttpGet]
         [Route("{id}/{field}/{fieldId}")]
         public virtual async Task<IActionResult> GetResourceArrayFieldItem([FromRoute] TModelKeyId id,
@@ -131,7 +134,8 @@ namespace ApiTools.Controllers
 
         protected virtual IActionResult GenerateActionResult(ServiceResponse response)
         {
-            if (!response.Success && response.Messages.Count == 0) return StatusCode(response.StatusCode);
+            if ((!response.Success && response.Messages.Count == 0) ||
+                response.StatusCode == StatusCodes.Status204NoContent) return StatusCode(response.StatusCode);
             return StatusCode(response.StatusCode, response);
         }
 
@@ -176,6 +180,10 @@ namespace ApiTools.Controllers
             return GetResource_Roles();
         }
 
+        protected virtual RouteRules UpsetResourcesField_Roles()
+        {
+            return UpdateResources_Roles();
+        }
         protected virtual RouteRules UpdateResource_Roles()
         {
             return DefaultShared_Roles();
@@ -264,7 +272,18 @@ namespace ApiTools.Controllers
             return GenerateActionResult(response);
         }
 
-
+        // [HttpPut]
+        // [Route("upsert")]
+        // public virtual async Task<IActionResult> UpsetResourcesField([FromBody] IEnumerable<TModelData> entities)
+        // {
+        //     var rolesResponse = CheckUserRoles(UpsetResourcesField_Roles());
+        //     if (rolesResponse != null) return rolesResponse;
+        //
+        //
+        //     var response = await Service.CreateOrUpdate(entities);
+        //     return GenerateActionResult(response);
+        // }
+        
         [HttpPatch("{id}")]
         public virtual async Task<IActionResult> Patch([FromRoute] TModelKeyId id,
             [FromBody] JsonPatchDocument<TModelData> dataPatch)

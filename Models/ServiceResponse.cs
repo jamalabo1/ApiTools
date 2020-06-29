@@ -10,9 +10,10 @@ namespace ApiTools.Models
     {
         public bool Success { get; set; }
 
-        [System.Text.Json.Serialization.JsonIgnore] public bool TriggerSave { get; set; } = true;
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool TriggerSave { get; set; } = true;
 
-        [JsonPropertyName("status")] 
+        [JsonPropertyName("status")]
         [JsonProperty("status")]
         public int StatusCode { get; set; }
 
@@ -70,13 +71,19 @@ namespace ApiTools.Models
 
         public static ServiceResponse<T> FromOtherResponse<TOther>(ServiceResponse<TOther> otherResponse)
         {
-            ServiceResponse response = otherResponse;
-            return (ServiceResponse<T>) response;
+            return FromOtherResponse((ServiceResponse) otherResponse);
         }
 
         public static ServiceResponse<T> FromOtherResponse(ServiceResponse otherResponse)
         {
-            return (ServiceResponse<T>) otherResponse;
+            return new ServiceResponse<T>
+            {
+                Response = default,
+                StatusCode = otherResponse.StatusCode,
+                Messages = otherResponse.Messages,
+                Success = otherResponse.Success,
+                TriggerSave = otherResponse.TriggerSave
+            };
         }
     }
 }

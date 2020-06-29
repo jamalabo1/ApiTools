@@ -11,49 +11,51 @@ namespace ApiTools.Context
 {
     public interface IContext<TModel, in TModelKeyId>
     {
-        Task CreateWithoutSave(TModel entities);
-        Task CreateWithoutSave([NoEnumeration] IEnumerable<TModel> entities);
-        Task<TModel> Create(TModel entity);
-        Task<IEnumerable<TModel>> Create([NoEnumeration] IEnumerable<TModel> entities);
+        Task CreateWithoutSave(TModel entities, ContextOptions options = default);
+        Task CreateWithoutSave([NoEnumeration] IEnumerable<TModel> entities, ContextOptions options = default);
+        Task<TModel> Create(TModel entity, ContextOptions options = default);
+
+        Task<IEnumerable<TModel>> Create([NoEnumeration] IEnumerable<TModel> entities,
+            ContextOptions options = default);
 
 
-        Task<TModel> FindOne(TModelKeyId id, ContextReadOptions options = default);
-        IQueryable<TModel> FindByIds(IEnumerable<TModelKeyId> ids, ContextReadOptions options = default);
-        Task<TModel> FindOne(Expression<Func<TModel, bool>> expression, ContextReadOptions options = default);
+        Task<TModel> FindOne(TModelKeyId id, ContextOptions options = default);
+        IQueryable<TModel> FindByIds(IEnumerable<TModelKeyId> ids, ContextOptions options = default);
+        Task<TModel> FindOne(Expression<Func<TModel, bool>> expression, ContextOptions options = default);
 
-        IQueryable<TModel> Find(Expression<Func<TModel, bool>> expression, ContextReadOptions options = default);
+        IQueryable<TModel> Find(Expression<Func<TModel, bool>> expression, ContextOptions options = default);
 
         IQueryable<TModel> Find(IEnumerable<Expression<Func<TModel, bool>>> expressions,
-            ContextReadOptions options = default);
+            ContextOptions options = default);
 
-        Expression<Func<TModel, bool>> FindById(TModelKeyId id);
+        Expression<Func<TModel, bool>> FindById(TModelKeyId id, ContextOptions options = default);
 
-        IQueryable<TModel> Find(ContextReadOptions options = default);
+        IQueryable<TModel> Find(ContextOptions options = default);
+
+        Task<TModel> Update(TModel entity, ContextOptions options = default);
+        Task<IEnumerable<TModel>> Update(IEnumerable<TModel> entity, ContextOptions options = default);
+        void UpdateWithoutSave(TModel entity, ContextOptions options = default);
+        void UpdateWithoutSave([NoEnumeration] IEnumerable<TModel> entities, ContextOptions options = default);
 
 
-        Task<TModel> Update(TModel entity);
-        Task<IEnumerable<TModel>> Update(IEnumerable<TModel> entity);
-        void UpdateWithoutSave(TModel entity);
-        void UpdateWithoutSave([NoEnumeration] IEnumerable<TModel> entities);
+        Task Delete(TModel entity, ContextOptions options = default);
+        Task Delete([NoEnumeration] IEnumerable<TModel> entities, ContextOptions options = default);
 
+        void DeleteWithoutSave([NoEnumeration] IEnumerable<TModel> entities, ContextOptions options = default);
+        void DeleteWithoutSave(TModel entity, ContextOptions options = default);
 
-        Task Delete(TModel entity);
-        Task Delete([NoEnumeration] IEnumerable<TModel> entities);
-
-        void DeleteWithoutSave([NoEnumeration] IEnumerable<TModel> entities);
-        void DeleteWithoutSave(TModel entity);
-
-        Task<bool> Exist(TModelKeyId id, ContextReadOptions options = default);
-        Task<bool> Exist(Expression<Func<TModel, bool>> expression, ContextReadOptions options = default);
-        Task<bool> Exist(IEnumerable<Expression<Func<TModel, bool>>> expressions, ContextReadOptions options = default);
-        Task<bool> Exist(IEnumerable<TModelKeyId> ids, ContextReadOptions options = default);
-        IQueryable<TModel> Order(IQueryable<TModel> entities);
-        void Detach(TModel entity);
-        Task Save();
+        Task<bool> Exist(TModelKeyId id, ContextOptions options = default);
+        Task<bool> Exist(Expression<Func<TModel, bool>> expression, ContextOptions options = default);
+        Task<bool> Exist(IEnumerable<Expression<Func<TModel, bool>>> expressions, ContextOptions options = default);
+        Task<bool> Exist(IEnumerable<TModelKeyId> ids, ContextOptions options = default);
+        IQueryable<TModel> Order(IQueryable<TModel> entities, ContextOptions options = default);
+        void Detach(TModel entity, ContextOptions options = default);
+        Task Save(ContextOptions options = default);
     }
 
     public class Context<TModel, TModelKeyId> : IContext<TModel, TModelKeyId>
-        where TModel : ContextEntity<TModelKeyId> where TModelKeyId : new()
+        where TModel : ContextEntity<TModelKeyId>
+        where TModelKeyId : new()
     {
         private static readonly Type ModelKeyIdType = typeof(TModelKeyId);
         private readonly IDbContext _context;
@@ -63,22 +65,36 @@ namespace ApiTools.Context
             _context = context;
         }
 
-        public Context(IDbContext context, IQueryable<TModel> setQuery)
-        {
-            _context = context;
-            SetQuery = setQuery;
-        }
-
         protected virtual IQueryable<TModel> SetQuery { get; set; }
+
+        private DbSet<TModel> GetDbSet()
+        {
+            return _context.Set<TModel>();
+        }
+        private IQueryable<TModel> GetSetQuery()
+        {
+            return SetQuery ?? GetDbSet().AsQueryable();
+        }
 
         /// <summary>
         ///     Adds entities to the set without calling the <c>Save</c> method.
         /// </summary>
         /// <param name="entities">Entities to be added to the set</param>
         /// <returns></returns>
-        public virtual async Task CreateWithoutSave([NoEnumeration] IEnumerable<TModel> entities)
+        public virtual async Task CreateWithoutSave([NoEnumeration] IEnumerable<TModel> entities,
+            ContextOptions options = default)
         {
+            options = InitiateOptions(options);
             await _context.AddRangeAsync(entities);
+
+            // if (options.Upsert)
+            // {
+            //     await _context.AddRangeAsync(entities.AsQueryable()
+            //         .TagWith(UpsertTags.UpsertTag));
+            // }
+            // else
+            // {
+            // }
         }
 
         /// <summary>
@@ -86,9 +102,10 @@ namespace ApiTools.Context
         /// </summary>
         /// <param name="entity">Entity to be added to the set</param>
         /// <returns></returns>
-        public virtual async Task CreateWithoutSave(TModel entity)
+        public virtual async Task CreateWithoutSave(TModel entity, ContextOptions options = default)
         {
-            await _context.AddAsync(entity);
+            await CreateWithoutSave(new[] {entity}, options);
+            // await _context.AddAsync(entity);
         }
 
         /// <summary>
@@ -96,10 +113,12 @@ namespace ApiTools.Context
         /// </summary>
         /// <param name="entities">Entities to be added to the database</param>
         /// <returns>Entities after calling <c>Save</c> method</returns>
-        public virtual async Task<IEnumerable<TModel>> Create([NoEnumeration] IEnumerable<TModel> entities)
+        public virtual async Task<IEnumerable<TModel>> Create([NoEnumeration] IEnumerable<TModel> entities,
+            ContextOptions options)
         {
-            await CreateWithoutSave(entities);
-            await Save();
+            options = InitiateOptions(options);
+            await CreateWithoutSave(entities, options);
+            await Save(options);
             return entities;
         }
 
@@ -108,10 +127,10 @@ namespace ApiTools.Context
         /// </summary>
         /// <param name="entity">Single entity to be added to the database</param>
         /// <returns>The entity after calling the <c>Save</c> method</returns>
-        public virtual async Task<TModel> Create(TModel entity)
+        public virtual async Task<TModel> Create(TModel entity, ContextOptions options = default)
         {
-            await _context.AddAsync(entity);
-            await Save();
+            options = InitiateOptions(options);
+            await Create(new[] {entity}, options);
             Detach(entity);
             return entity;
         }
@@ -122,7 +141,7 @@ namespace ApiTools.Context
         /// <param name="id">Entity's Id of type <c>TModelKeyId</c></param>
         /// <param name="options">Read options</param>
         /// <returns>Entity that matches the id, null if no match</returns>
-        public virtual async Task<TModel> FindOne(TModelKeyId id, ContextReadOptions options = null)
+        public virtual async Task<TModel> FindOne(TModelKeyId id, ContextOptions options = null)
         {
             return await FindOne(FindById(id), options);
         }
@@ -139,7 +158,7 @@ namespace ApiTools.Context
         /// <param name="options">Read options</param>
         /// <returns>Entity that matches the expression, <c>null</c> if no match</returns>
         public virtual async Task<TModel> FindOne(Expression<Func<TModel, bool>> expression,
-            ContextReadOptions options = null)
+            ContextOptions options = null)
         {
             var query = Find(expression, options);
             if (query == default) return default;
@@ -154,7 +173,7 @@ namespace ApiTools.Context
         /// <param name="ids">an <c>IEnumerable</c> of ids of type <c>TModelKeyId</c></param>
         /// <param name="options">Read options</param>
         /// <returns>a query for entities that have an id that exists in the supplied ids.</returns>
-        public virtual IQueryable<TModel> FindByIds(IEnumerable<TModelKeyId> ids, ContextReadOptions options)
+        public virtual IQueryable<TModel> FindByIds(IEnumerable<TModelKeyId> ids, ContextOptions options = default)
         {
             return Find(_findByIds(ids, options), options);
         }
@@ -166,7 +185,7 @@ namespace ApiTools.Context
         /// <param name="options">Read options</param>
         /// <returns>a query for entities that match the expression</returns>
         public virtual IQueryable<TModel> Find(Expression<Func<TModel, bool>> expression,
-            ContextReadOptions options = null)
+            ContextOptions options = null)
         {
             return Find(new[] {expression}, options);
         }
@@ -176,7 +195,7 @@ namespace ApiTools.Context
         /// </summary>
         /// <param name="options">Read options</param>
         /// <returns>find query</returns>
-        public virtual IQueryable<TModel> Find(ContextReadOptions options = default)
+        public virtual IQueryable<TModel> Find(ContextOptions options = default)
         {
             return Find(Enumerable.Empty<Expression<Func<TModel, bool>>>(), options);
         }
@@ -191,7 +210,7 @@ namespace ApiTools.Context
         ///     <c>OR</c>)
         /// </returns>
         public virtual IQueryable<TModel> Find(IEnumerable<Expression<Func<TModel, bool>>> expressions,
-            ContextReadOptions options = null)
+            ContextOptions options = null)
         {
             return _find(expressions, options);
         }
@@ -202,11 +221,12 @@ namespace ApiTools.Context
         /// </summary>
         /// <param name="entity">entity of type TModel</param>
         /// <returns>the updated entity</returns>
-        public virtual async Task<TModel> Update(TModel entity)
+        public virtual async Task<TModel> Update(TModel entity, ContextOptions options = default)
         {
+            options = InitiateOptions(options);
             // _context.entity(entity).State = EntityState.Modified;
             _context.Update(entity);
-            await Save();
+            await Save(options);
             return entity;
         }
 
@@ -215,10 +235,12 @@ namespace ApiTools.Context
         /// </summary>
         /// <param name="entities">a collection of entities</param>
         /// <returns>updated entities</returns>
-        public virtual async Task<IEnumerable<TModel>> Update([NoEnumeration] IEnumerable<TModel> entities)
+        public virtual async Task<IEnumerable<TModel>> Update([NoEnumeration] IEnumerable<TModel> entities,
+            ContextOptions options = default)
         {
+            options = InitiateOptions(options);
             _context.UpdateRange(entities);
-            await Save();
+            await Save(options);
             return entities;
         }
 
@@ -226,7 +248,7 @@ namespace ApiTools.Context
         ///     updates the entity without triggering the <c>Save</c> method (save the entity in memory)
         /// </summary>
         /// <param name="entity">the entity to be updated</param>
-        public void UpdateWithoutSave(TModel entity)
+        public void UpdateWithoutSave(TModel entity, ContextOptions options = default)
         {
             _context.Update(entity);
             // _context.entity(entity).State = EntityState.Modified;
@@ -236,7 +258,7 @@ namespace ApiTools.Context
         ///     updates the entities without triggering the <c>Save</c> method (save the entities in memory)
         /// </summary>
         /// <param name="entities">the entities to be updated</param>
-        public void UpdateWithoutSave(IEnumerable<TModel> entities)
+        public void UpdateWithoutSave(IEnumerable<TModel> entities, ContextOptions options = default)
         {
             _context.UpdateRange(entities);
             // Set.UpdateRange(entities);
@@ -247,73 +269,78 @@ namespace ApiTools.Context
         ///     deletes an entity
         /// </summary>
         /// <param name="entity">the entity to be deleted</param>
-        public virtual async Task Delete(TModel entity)
+        public virtual async Task Delete(TModel entity, ContextOptions options = default)
         {
+            options = InitiateOptions(options);
             _context.Remove(entity);
-            await Save();
+            await Save(options);
         }
 
-        public virtual async Task Delete(IEnumerable<TModel> entities)
+        public virtual async Task Delete(IEnumerable<TModel> entities, ContextOptions options = default)
+        {
+            options = InitiateOptions(options);
+            _context.RemoveRange(entities);
+            await Save(options);
+        }
+
+        public virtual void DeleteWithoutSave(IEnumerable<TModel> entities, ContextOptions options = default)
         {
             _context.RemoveRange(entities);
-            await Save();
         }
 
-        public virtual void DeleteWithoutSave(IEnumerable<TModel> entities)
-        {
-            _context.RemoveRange(entities);
-        }
-
-        public virtual void DeleteWithoutSave(TModel entity)
+        public virtual void DeleteWithoutSave(TModel entity, ContextOptions options = default)
         {
             _context.Remove(entity);
         }
 
 
-        public virtual void Detach(TModel entity)
+        public virtual void Detach(TModel entity, ContextOptions options = default)
         {
-            if (entity != null)
+            if (entity != null) _context.Entry(entity).State = EntityState.Detached;
+        }
+
+        public virtual async Task Save(ContextOptions options = default)
+        {
+            options = InitiateOptions(options);
+            if (options.Upsert)
             {
-                _context.Entry(entity).State = EntityState.Detached;
+                _context.Set<TModel>().TagWith(UpsertTags.UpsertTag);
             }
-        }
 
-        public virtual async Task Save()
-        {
             await _context.SaveChangesAsync();
         }
 
-        public virtual Expression<Func<TModel, bool>> FindById(TModelKeyId id)
+        public virtual Expression<Func<TModel, bool>> FindById(TModelKeyId id, ContextOptions options = default)
         {
             return _findById(id);
         }
 
-        public virtual async Task<bool> Exist(TModelKeyId id, ContextReadOptions options = default)
+        public virtual async Task<bool> Exist(TModelKeyId id, ContextOptions options = default)
         {
             return await Exist(_findById(id), options);
         }
 
         public virtual async Task<bool> Exist(Expression<Func<TModel, bool>> expression,
-            ContextReadOptions options = default)
+            ContextOptions options = default)
         {
             return await Exist(new[] {expression}, options);
         }
 
         public virtual async Task<bool> Exist(IEnumerable<TModelKeyId> ids,
-            ContextReadOptions options = default)
+            ContextOptions options = default)
         {
             if (options?.AllExist == true) return await Count(_findByIds(ids, options), options) == ids.LongCount();
             return await Exist(_findByIds(ids, options), options);
         }
 
         public virtual async Task<bool> Exist(IEnumerable<Expression<Func<TModel, bool>>> expressions,
-            ContextReadOptions options = default)
+            ContextOptions options = default)
         {
             return await AnyAsync(expressions, options);
         }
 
 
-        public virtual IQueryable<TModel> Order(IQueryable<TModel> entities)
+        public virtual IQueryable<TModel> Order(IQueryable<TModel> entities, ContextOptions options = default)
         {
             if (entities is IQueryable<DbEntity<TModelKeyId>> dbEntities)
                 return dbEntities.OrderBy(x => x.CreationTime).Cast<TModel>();
@@ -321,19 +348,21 @@ namespace ApiTools.Context
         }
 
         private static Expression<Func<TModel, bool>> _findByIds(IEnumerable<TModelKeyId> ids,
-            ContextReadOptions options)
+            ContextOptions options)
         {
             var listIds = ids.ToList();
-            if (ModelKeyIdType.IsPrimitive) return x => listIds.Contains(x.Id);
+            if (ModelKeyIdType.IsPrimitive)
             {
-                var normalizedIds = listIds.ToList();
-                return x => normalizedIds.Contains(x.Id);
+                return x => listIds.Contains(x.Id);
             }
+
+            var normalizedIds = listIds.Select(x => x.ToString()).ToList();
+            return x=> normalizedIds.Contains(x.Id.ToString());
         }
 
 
         protected virtual async Task<bool> AnyAsync(IEnumerable<Expression<Func<TModel, bool>>> expressions,
-            ContextReadOptions options = default)
+            ContextOptions options = default)
         {
             var query = Find(expressions, options);
             if (query == default) return default;
@@ -341,30 +370,25 @@ namespace ApiTools.Context
         }
 
         protected virtual async Task<long> Count(Expression<Func<TModel, bool>> expression,
-            ContextReadOptions options = default)
+            ContextOptions options = default)
         {
             var query = Find(expression, options);
             if (query == default) return default;
             return await query.LongCountAsync();
         }
 
-        protected virtual IQueryable<TModel> _read(ContextReadOptions options = default)
+        protected virtual IQueryable<TModel> _read(ContextOptions options = default)
         {
-            var set = SetQuery;
+            var set = GetSetQuery();
             if (options != default && options.Order) set = Order(set);
             if (options != default && options.Query) set = GetQueryProvider(set);
             return set;
         }
 
         protected virtual IQueryable<TModel> _find(IEnumerable<Expression<Func<TModel, bool>>> expressions,
-            ContextReadOptions options = default)
+            ContextOptions options = default)
         {
-            options ??= new ContextReadOptions
-            {
-                Order = true,
-                Query = true,
-                Track = false
-            };
+            options = InitiateOptions(options);
             var set = _read(options);
             if (set == null) return default;
             if (expressions == null) return set;
@@ -398,6 +422,19 @@ namespace ApiTools.Context
 
             return expression;
         }
+
+        private static ContextOptions InitiateOptions(ContextOptions options = default)
+        {
+            options ??= new ContextOptions
+            {
+                Order = true,
+                Query = true,
+                Track = false,
+                Upsert = false
+            };
+            return options;
+        }
+
 
         private static Expression<Func<TModel, bool>> _findById(TModelKeyId id)
         {

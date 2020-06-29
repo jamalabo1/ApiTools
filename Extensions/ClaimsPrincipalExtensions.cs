@@ -10,8 +10,10 @@ namespace ApiTools.Extensions
             if (principal == null)
                 throw new ArgumentNullException(nameof(principal));
             var id = principal.FindFirst(ClaimTypes.NameIdentifier);
-            return id == null ? Guid.Empty : Guid.Parse(id.Value);
+            if (id == null || id.Value == string.Empty) return Guid.Empty;
+            return Guid.TryParse(id.Value, out var gid) ? gid : Guid.Empty;
         }
+
         public static string GetUserRole(this ClaimsPrincipal principal)
         {
             if (principal == null)

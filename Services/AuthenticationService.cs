@@ -43,7 +43,7 @@ namespace ApiTools.Services
             var entity =
                 await context.FindOne(
                     expression,
-                    ContextReadOptions.DisableQuery);
+                    ContextOptions.DisableQuery);
             if (entity == null)
                 return new ServiceResponse<LoginResponse>
                 {
@@ -81,12 +81,14 @@ namespace ApiTools.Services
                     },
                     Success = false
                 };
-            var token = _tokenService.GenerateToken(entity.Id.ToString(), role);
+            var token = _tokenService.GenerateToken(
+                _tokenService.GenerateClaims(entity.Id.ToString(), role)
+            );
             return _resp(token, role, entity.Id);
         }
 
 
-        private static ServiceResponse<LoginResponse> _resp<TModelId>(string token, string role, TModelId accountId)
+        protected static ServiceResponse<LoginResponse> _resp<TModelId>(string token, string role, TModelId accountId)
         {
             var resp = new LoginResponse
             {

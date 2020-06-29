@@ -4,7 +4,7 @@
         <TargetFramework>netcoreapp3.1</TargetFramework>
         <Nullable>disable</Nullable>
         <Title>ASP.NET Core API Tools</Title>
-        <PackageVersion>1.0.1-beta.10</PackageVersion>
+        <PackageVersion>1.0.2-beta.1</PackageVersion>
         <Description>API tools for ASP.NET Core API, It shortens time for building a generic APIs (CRUD)</Description>
         <Copyright>Jamal Abo Mokh</Copyright>
         <PackageProjectUrl>https://github.com/jamalabo1/ApiTools</PackageProjectUrl>
@@ -28,6 +28,8 @@
         <PackageReference Include="Microsoft.AspNetCore.Http" Version="2.2.2" />
         <PackageReference Include="Microsoft.AspNetCore.Mvc" Version="2.2.0" />
         <PackageReference Include="Microsoft.EntityFrameworkCore" Version="3.1.5" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="3.1.5" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational.Design" Version="1.1.6" />
         <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="6.6.0" />
         <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="6.6.0" />
         <PackageReference Include="System.Net.Http.Formatting.Extension" Version="5.2.3" />

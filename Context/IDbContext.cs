@@ -2,6 +2,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace ApiTools.Context
@@ -33,5 +34,13 @@ namespace ApiTools.Context
 
         Task AddRangeAsync([NotNull] params object[] entities);
         EntityEntry Add([NotNull] object entity);
+        DbSet<TEntity> Set<TEntity>() where TEntity : class;
+
+        public ValueTask<TEntity> FindAsync<TEntity>([CanBeNull] params object[] keyValues) where TEntity : class;
+
+        public ValueTask<TEntity> FindAsync<TEntity>([CanBeNull] object[] keyValues,
+            CancellationToken cancellationToken)
+            where TEntity : class;
+
     }
 }

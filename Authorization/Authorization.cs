@@ -14,6 +14,7 @@ namespace ApiTools.Authorization
     {
         public string UserRole { get; set; }
         public TEntityId UserId { get; set; }
+        public ClaimsPrincipal User { get; set; }
     }
 
     public static class AuthorizationRoleRequirement
@@ -185,7 +186,8 @@ namespace ApiTools.Authorization
                                 new AuthorizationInfoContext<TUserId>
                                 {
                                     UserId = userId,
-                                    UserRole = userRole
+                                    UserRole = userRole,
+                                    User = context.User
                                 }))
                                 return;
                         }

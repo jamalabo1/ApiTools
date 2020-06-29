@@ -1,11 +1,11 @@
 ﻿namespace ApiTools.Models
 {
-    public class ContextReadOptions
+    public class ContextOptions
     {
-        public static readonly ContextReadOptions AllowTrack = new ContextReadOptions {Track = true};
-        public static readonly ContextReadOptions DisableTrack = new ContextReadOptions {Track = false};
-        public static readonly ContextReadOptions DisableQuery = new ContextReadOptions {Query = false};
-        public static readonly ContextReadOptions EnableAllExist = new ContextReadOptions {AllExist = true};
+        public static readonly ContextOptions AllowTrack = new ContextOptions {Track = true};
+        public static readonly ContextOptions DisableTrack = new ContextOptions {Track = false};
+        public static readonly ContextOptions DisableQuery = new ContextOptions {Query = false};
+        public static readonly ContextOptions EnableAllExist = new ContextOptions {AllExist = true};
 
         /// <summary>
         ///     Call GetQueryProvider on the entities,
@@ -44,5 +44,8 @@
         ///     database gets a <c>OR</c> operation
         /// </summary>
         public bool UseAndInMultipleExpressions { get; set; } = true;
+
+        public bool Upsert { get; set; } = false;
+
     }
 }

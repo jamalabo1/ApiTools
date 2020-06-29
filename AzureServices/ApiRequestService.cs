@@ -11,29 +11,29 @@ namespace ApiTools.AzureServices
 {
     public interface IApiRequestsService
     {
-        Task<string> Post<T>(string path, T data);
+        Task<HttpResponseMessage> Post<T>(string path, T data);
         Task<HttpResponseMessage> Put<T>(string path, T data);
-        Task<string> Get(string path);
+        Task<HttpResponseMessage> Get(string path);
         Task<T> Get<T>(string path);
-        Task<string> Patch<T>(string path, JsonPatchDocument<T> data) where T : class;
+        Task<HttpResponseMessage> Patch<T>(string path, JsonPatchDocument<T> data) where T : class;
 
         void SetBearerAuthorizationToken(string authorizationToken);
         void SetAuthorizationToken(string authorizationToken);
     }
-    
+
     public static class HttpClientExtension
     {
         public static Task<HttpResponseMessage> PatchAsJsonAsync<T>(this HttpClient client, string requestUri, T value)
         {
             var content = new ObjectContent<T>(value, new JsonMediaTypeFormatter());
-            var request = new HttpRequestMessage(new HttpMethod("PATCH"), requestUri) { Content = content };
+            var request = new HttpRequestMessage(new HttpMethod("PATCH"), requestUri) {Content = content};
 
             return client.SendAsync(request);
         }
     }
+
     public class ApiRequestsService : IApiRequestsService
     {
-        
         private readonly string _apiUrl;
         private readonly HttpClient _httpClient;
 
@@ -44,17 +44,16 @@ namespace ApiTools.AzureServices
         }
 
 
-        public async Task<string> Post<T>(string path, T data)
+        public async Task<HttpResponseMessage> Post<T>(string path, T data)
         {
             var response = await _httpClient.PostAsJsonAsync(ApiPath(path), data);
-            var result = await response.Content.ReadAsStringAsync();
-            return result;
+            return response;
         }
-        public async Task<string> Patch<T>(string path, JsonPatchDocument<T> data) where T : class
+
+        public async Task<HttpResponseMessage> Patch<T>(string path, JsonPatchDocument<T> data) where T : class
         {
             var response = await _httpClient.PatchAsJsonAsync(ApiPath(path), data);
-            var result = await response.Content.ReadAsStringAsync();
-            return result;
+            return response;
         }
 
         public async Task<HttpResponseMessage> Put<T>(string path, T data)
@@ -63,14 +62,12 @@ namespace ApiTools.AzureServices
             return response;
         }
 
-        public async Task<string> Get(string path)
+        public async Task<HttpResponseMessage> Get(string path)
         {
             try
             {
                 var response = await _httpClient.GetAsync(ApiPath(path));
-                if (response == null) return null;
-                var result = await response.Content.ReadAsStringAsync();
-                return result;
+                return response;
             }
             catch (Exception)
             {
@@ -78,9 +75,9 @@ namespace ApiTools.AzureServices
             }
         }
 
-        public async Task<T> Get<T>(string path) 
+        public async Task<T> Get<T>(string path)
         {
-            var value = await Get(path);
+            var value = await (await Get(path)).Content.ReadAsStringAsync();
             return string.IsNullOrEmpty(value) ? default : JsonConvert.DeserializeObject<T>(value);
         }
 

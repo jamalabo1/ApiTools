@@ -7,23 +7,23 @@ namespace ApiTools.Provider
 {
     public interface IResourceQueryProvider
     {
-        IQueryable<T> GetSet<T>(IQueryable<T> set);
+        IQueryable<T> GetQuery<T>(IQueryable<T> set);
     }
 
     public class ResourceQueryProvider : IResourceQueryProvider
     {
-        private readonly Guid _userId;
-        private readonly string _userRole;
+        protected readonly Guid UserId;
+        protected readonly string UserRole;
 
         public ResourceQueryProvider(IHttpContextAccessor accessor)
         {
             var user = accessor?.HttpContext?.User;
             if (user == null) return;
-            _userId = user.GetUserId();
-            _userRole = user.GetUserRole();
+            UserId = user.GetUserId();
+            UserRole = user.GetUserRole();
         }
 
-        public IQueryable<T> GetSet<T>(IQueryable<T> set)
+        public virtual IQueryable<T> GetQuery<T>(IQueryable<T> set)
         {
             return set;
         }
