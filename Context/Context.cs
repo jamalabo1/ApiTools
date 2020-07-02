@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
+using ApiTools.Helpers;
 using ApiTools.Models;
 using JetBrains.Annotations;
 using Microsoft.EntityFrameworkCore;
@@ -46,15 +47,18 @@ namespace ApiTools.Context
 
         Task<bool> Exist(TModelKeyId id, ContextOptions options = default);
         Task<bool> Exist(Expression<Func<TModel, bool>> expression, ContextOptions options = default);
-        Task<bool> Exist(IEnumerable<Expression<Func<TModel, bool>>> expressions, ContextOptions options = default);
         Task<bool> Exist(IEnumerable<TModelKeyId> ids, ContextOptions options = default);
+        Task<bool> Exist(IEnumerable<Expression<Func<TModel, bool>>> expressions, ContextOptions options = default);
+
+        IQueryable<TModel> ExistQuery(IEnumerable<Expression<Func<TModel, bool>>> expressions,
+            ContextOptions options = default);
         IQueryable<TModel> Order(IQueryable<TModel> entities, ContextOptions options = default);
         void Detach(TModel entity, ContextOptions options = default);
         Task Save(ContextOptions options = default);
     }
 
     public class Context<TModel, TModelKeyId> : IContext<TModel, TModelKeyId>
-        where TModel : ContextEntity<TModelKeyId>
+        where TModel : IContextEntity<TModelKeyId>
         where TModelKeyId : new()
     {
         private static readonly Type ModelKeyIdType = typeof(TModelKeyId);
@@ -67,15 +71,6 @@ namespace ApiTools.Context
 
         protected virtual IQueryable<TModel> SetQuery { get; set; }
 
-        private DbSet<TModel> GetDbSet()
-        {
-            return _context.Set<TModel>();
-        }
-        private IQueryable<TModel> GetSetQuery()
-        {
-            return SetQuery ?? GetDbSet().AsQueryable();
-        }
-
         /// <summary>
         ///     Adds entities to the set without calling the <c>Save</c> method.
         /// </summary>
@@ -86,7 +81,6 @@ namespace ApiTools.Context
         {
             options = InitiateOptions(options);
             await _context.AddRangeAsync(entities);
-
             // if (options.Upsert)
             // {
             //     await _context.AddRangeAsync(entities.AsQueryable()
@@ -105,7 +99,6 @@ namespace ApiTools.Context
         public virtual async Task CreateWithoutSave(TModel entity, ContextOptions options = default)
         {
             await CreateWithoutSave(new[] {entity}, options);
-            // await _context.AddAsync(entity);
         }
 
         /// <summary>
@@ -118,6 +111,7 @@ namespace ApiTools.Context
         {
             options = InitiateOptions(options);
             await CreateWithoutSave(entities, options);
+            options.DetachAfterSave = true;
             await Save(options);
             return entities;
         }
@@ -131,7 +125,6 @@ namespace ApiTools.Context
         {
             options = InitiateOptions(options);
             await Create(new[] {entity}, options);
-            Detach(entity);
             return entity;
         }
 
@@ -298,16 +291,23 @@ namespace ApiTools.Context
         {
             if (entity != null) _context.Entry(entity).State = EntityState.Detached;
         }
+        protected virtual void Detach(IEnumerable<TModel> entities, ContextOptions options = default)
+        {
+            foreach (var contextEntity in entities)
+            {
+                _context.Entry(contextEntity).State = EntityState.Detached;
+            }
+        }
 
         public virtual async Task Save(ContextOptions options = default)
         {
             options = InitiateOptions(options);
-            if (options.Upsert)
+            await _context.SaveChangesAsync();
+            if (options.DetachAfterSave)
             {
-                _context.Set<TModel>().TagWith(UpsertTags.UpsertTag);
+                _context.DetachAll();
             }
 
-            await _context.SaveChangesAsync();
         }
 
         public virtual Expression<Func<TModel, bool>> FindById(TModelKeyId id, ContextOptions options = default)
@@ -339,25 +339,44 @@ namespace ApiTools.Context
             return await AnyAsync(expressions, options);
         }
 
+        public virtual IQueryable<TModel> ExistQuery(IEnumerable<Expression<Func<TModel, bool>>> expressions,
+            ContextOptions options = default)
+        {
+            return Find(expressions, options);
+        }
+
 
         public virtual IQueryable<TModel> Order(IQueryable<TModel> entities, ContextOptions options = default)
         {
-            if (entities is IQueryable<DbEntity<TModelKeyId>> dbEntities)
-                return dbEntities.OrderBy(x => x.CreationTime).Cast<TModel>();
+            // if (PropertyHelper.BaseType(typeof(TModel)).IsSubclassOf(typeof(IDbEntity<>)))
+            //     return entities.OrderBy(x => x.CreationTime);
             return entities;
         }
 
+        protected virtual DbSet<TTModel> GetDbSet<TTModel>() where TTModel : class
+        {
+            return _context.Set<TTModel>();
+        }
+
+        protected virtual IQueryable<TModel> GetSetQuery()
+        {
+            return SetQuery;
+        }
+
+        private IQueryable<TTModel> GetSetQuery<TTModel>() where TTModel: class
+        {
+            return GetDbSet<TTModel>().AsQueryable();
+        }
         private static Expression<Func<TModel, bool>> _findByIds(IEnumerable<TModelKeyId> ids,
             ContextOptions options)
         {
             var listIds = ids.ToList();
-            if (ModelKeyIdType.IsPrimitive)
-            {
-                return x => listIds.Contains(x.Id);
-            }
+            return x => listIds.Contains(x.Id);
+            // var isPrimitiveType = ModelKeyIdType.IsPrimitive;
+            // if (isPrimitiveType) return ;
 
-            var normalizedIds = listIds.Select(x => x.ToString()).ToList();
-            return x=> normalizedIds.Contains(x.Id.ToString());
+            // var normalizedIds = listIds.Select(x => x.ToString()).ToList();
+            // return x => normalizedIds.Contains(x.Id.ToString());
         }
 
 

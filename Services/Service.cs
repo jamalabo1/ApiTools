@@ -443,7 +443,7 @@ namespace ApiTools.Services
             IQueryable<T> query,
             Expression body,
             ParameterExpression param,
-            ServiceOptions<T> options)
+            ServiceOptions<TModel> options)
         {
             var expressionSelect = Expression.Lambda<Func<T, IEnumerable<TProperty>>>(body, param);
             var selectMany = query.SelectMany(expressionSelect);
@@ -456,7 +456,7 @@ namespace ApiTools.Services
             IQueryable<T> query,
             Expression body,
             ParameterExpression param,
-            ServiceOptions<T> options
+            ServiceOptions<TModel> options
         ) where TProperty : ContextEntity<long>
         {
             var expressionSelect = Expression.Lambda<Func<T, IEnumerable<TProperty>>>(body, param);
@@ -472,7 +472,7 @@ namespace ApiTools.Services
             Expression body,
             ParameterExpression param,
             bool isArray,
-            ServiceOptions<T> options)
+            ServiceOptions<TModel> options)
         {
             if (isArray)
             {
@@ -496,7 +496,7 @@ namespace ApiTools.Services
             IQueryable<T> query,
             Expression body,
             ParameterExpression param,
-            ServiceOptions<T> options
+            ServiceOptions<TModel> options
         )
         {
             var expressionSelect = Expression.Lambda<Func<T, TProperty>>(body, param);
@@ -605,7 +605,7 @@ namespace ApiTools.Services
         protected virtual async Task<PagingServiceResponse<object>> SelectManyFromListVirtual<T, T2>(
             IQueryable<T> queryable,
             IEnumerable<string> properties,
-            ServiceOptions<T> options)
+            ServiceOptions<TModel> options)
         {
             dynamic queryResult = queryable;
             const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -646,7 +646,7 @@ namespace ApiTools.Services
         protected virtual IQueryable<TProperty> SelectManyQueryFromListVirtual<T, TProperty>(IQueryable<T> query,
             Expression body,
             ParameterExpression param,
-            ServiceOptions<T> options)
+            ServiceOptions<TModel> options)
         {
             var expressionSelect = Expression.Lambda<Func<T, IEnumerable<TProperty>>>(body, param);
             var selectMany = query.SelectMany(expressionSelect);
@@ -658,7 +658,7 @@ namespace ApiTools.Services
             IQueryable<T> query,
             Expression body,
             ParameterExpression param,
-            ServiceOptions<T> options)
+            ServiceOptions<TModel> options)
         {
             var expressionSelect = Expression.Lambda<Func<T, TProperty>>(body, param);
             var selectMany = query.Select(expressionSelect);
@@ -669,7 +669,7 @@ namespace ApiTools.Services
         protected virtual async Task<IEnumerable<TProperty>> SelectManyNotMapped<T, TProperty>(IQueryable<T> set,
             Expression body,
             ParameterExpression param,
-            ServiceOptions<T> options)
+            ServiceOptions<TModel> options)
         {
             var expressionSelect = Expression.Lambda<Func<T, IEnumerable<TProperty>>>(body, param);
             var data = await set.ToListAsync();
@@ -678,7 +678,7 @@ namespace ApiTools.Services
 
         protected virtual async Task<TProperty> SelectOneNotMapped<T, TProperty>(IQueryable<T> set, Expression body,
             ParameterExpression param,
-            ServiceOptions<T> options)
+            ServiceOptions<TModel> options)
         {
             var expressionSelect = Expression.Lambda<Func<T, TProperty>>(body, param);
             var data = await set.ToListAsync();
@@ -830,7 +830,8 @@ namespace ApiTools.Services
         }
 
         protected virtual async Task<ServiceResponse> BulkCreateOperation(
-            IList<(ServiceResponse<TModel>, TModelData)> data, IList<TModel> entities,
+            IList<(ServiceResponse<TModel>, TModelData)> data, 
+            IList<TModel> entities,
             ServiceOptions<TModel> options = default)
         {
             await _context.Save(options?.ContextOptions);
@@ -847,6 +848,7 @@ namespace ApiTools.Services
 
             if (await PostCreate(entities) || triggerSave) await _context.Save(options?.ContextOptions);
 
+            EmptyRelationalData(entities);
             return new ServiceResponse
             {
                 Success = true
@@ -898,6 +900,20 @@ namespace ApiTools.Services
                 StatusCode = StatusCodes.Status200OK,
                 TriggerSave = false
             });
+        }
+
+        protected virtual void EmptyRelationalData(IEnumerable<TModel> entities)
+        {
+            var virtualProperties = typeof(TModel).GetProperties(BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance).Where(x => x.GetAccessors().Any(r => r.IsVirtual));
+            foreach (var property in virtualProperties)
+            {
+                if (property.PropertyType.IsValueType &&
+                    Nullable.GetUnderlyingType(property.PropertyType) == null) continue;
+                foreach (var contextEntity in entities)
+                {
+                    property.SetValue(contextEntity, null);
+                }
+            }
         }
 
         protected virtual Task<ServiceResponse<TModel>> UpdateModel(TModel model, TModelData data)

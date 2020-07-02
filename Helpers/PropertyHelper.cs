@@ -17,17 +17,7 @@ namespace ApiTools.Helpers
             int? maxNestingLevel = DefaultMaxNestingLevel,
             bool enableDashedNames = true)
         {
-            var split = AccessPropertyFromName(propertyName, enableNesting, maxNestingLevel, enableDashedNames);
-            PropertyInfo propInfo = null;
-            foreach (var p in split)
-                if (propInfo == null)
-                    propInfo = typeof(T).GetProperty(p,
-                        BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
-                else if (enableNesting)
-                    propInfo = propInfo.PropertyType.GetProperty(p,
-                        BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
-
-            return propInfo;
+            return PropertyInfo(typeof(T), propertyName, enableNesting, maxNestingLevel, enableDashedNames);
         }
 
 
@@ -110,9 +100,13 @@ namespace ApiTools.Helpers
 
         public static bool IsPropertyAList(PropertyInfo propertyInfo)
         {
-            return propertyInfo.PropertyType.IsInterface &&
-                   propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)) ||
-                   propertyInfo.PropertyType.GetInterfaces().Contains(typeof(IList));
+            return IsPropertyAList(propertyInfo.PropertyType);
+        }
+        public static bool IsPropertyAList(Type propertyInfo)
+        {
+            return propertyInfo.IsInterface &&
+                   propertyInfo.GetInterfaces().Contains(typeof(IEnumerable)) ||
+                   propertyInfo.GetInterfaces().Contains(typeof(IList));
         }
 
         public static List<string> AccessPropertyFromName(string propertyName,
@@ -175,6 +169,14 @@ namespace ApiTools.Helpers
             if (IsPropertyAList(propertyInfo))
                 return propertyInfo.PropertyType.GetGenericArguments().FirstOrDefault();
             return propertyInfo.PropertyType;
+        }
+        public static Type BaseType(Type propertyInfo)
+        {
+            if (propertyInfo.IsArray)
+                return propertyInfo.GetElementType();
+            if (IsPropertyAList(propertyInfo))
+                return propertyInfo.GetGenericArguments().FirstOrDefault();
+            return propertyInfo;
         }
     }
 }

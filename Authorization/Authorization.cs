@@ -154,7 +154,10 @@ namespace ApiTools.Authorization
     public abstract class
         Authorization<TEntity, TUserId> : AuthorizationHandler<OperationAuthorizationRequirement, TEntity>
     {
-        protected abstract IAuthorizationRequirements<TEntity, TUserId> AuthorizationRequirements { get; set; }
+        protected virtual IAuthorizationRequirements<TEntity, TUserId> AuthorizationRequirements()
+        {
+            return null;
+        }
 
 
         protected override async Task HandleRequirementAsync(
@@ -165,9 +168,11 @@ namespace ApiTools.Authorization
         {
             var userRole = context.User.GetUserRole();
 
+            var requirements = AuthorizationRequirements();
+            if (requirements == null) return;
             var roleRequirements = userRole == null
-                ? AuthorizationRequirements[AuthorizationRoleRequirement.DefaultRole]
-                : AuthorizationRequirements[userRole];
+                ? requirements[AuthorizationRoleRequirement.DefaultRole]
+                : requirements[userRole];
 
 
             if (roleRequirements != null)

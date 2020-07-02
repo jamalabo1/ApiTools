@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace ApiTools.Context
 {
@@ -10,6 +11,7 @@ namespace ApiTools.Context
     {
         public AppDbContext(DbContextOptions options) : base(options)
         {
+   
         }
 
         public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess,
@@ -34,6 +36,16 @@ namespace ApiTools.Context
             });
 
             return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+
+        public void DetachAll()
+        {
+            var entityEntries = ChangeTracker.Entries().ToArray();
+
+            foreach (var entityEntry in entityEntries)
+            {
+                entityEntry.State = EntityState.Detached;
+            }
         }
     }
 }

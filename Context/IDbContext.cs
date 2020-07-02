@@ -42,5 +42,7 @@ namespace ApiTools.Context
             CancellationToken cancellationToken)
             where TEntity : class;
 
+        public void DetachAll();
+
     }
 }

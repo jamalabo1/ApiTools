@@ -2,6 +2,7 @@
 using System.Linq;
 using ApiTools.Models;
 using ApiTools.Provider;
+using JetBrains.Annotations;
 
 namespace ApiTools.Context
 {
@@ -10,26 +11,24 @@ namespace ApiTools.Context
         where TModelKeyId : new()
         where TResourceProvider : IResourceQueryProvider
     {
-        private readonly Func<IQueryable<TModel>, IQueryable<TModel>> _queryMapper;
+        [NotNull] private readonly IDbContext _context;
         private readonly TResourceProvider _resourceQueryProvider;
 
-        public InternalContext(IDbContext context,
+        public InternalContext([NotNull] IDbContext context,
             TResourceProvider resourceQueryProvider) : base(context)
         {
+            _context = context;
             _resourceQueryProvider = resourceQueryProvider;
-        }
-
-        public InternalContext(IDbContext context,
-            Func<IQueryable<TModel>, IQueryable<TModel>> queryMapper) : base(context)
-        {
-            _queryMapper = queryMapper;
         }
 
         protected override IQueryable<TModel> GetQueryProvider(IQueryable<TModel> set)
         {
-            return _resourceQueryProvider == null
-                ? _queryMapper(set)
-                : (IQueryable<TModel>) _resourceQueryProvider.GetQuery((dynamic) set);
+            return _resourceQueryProvider.GetQuery((dynamic) set);
+        }
+
+        protected override IQueryable<TModel> GetSetQuery()
+        {
+            return _context.Set<TModel>();
         }
     }
 }

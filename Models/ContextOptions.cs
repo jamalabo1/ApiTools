@@ -45,7 +45,9 @@
         /// </summary>
         public bool UseAndInMultipleExpressions { get; set; } = true;
 
-        public bool Upsert { get; set; } = false;
+        public bool Upsert { get; set; }
+
+        public bool DetachAfterSave { get; set; }
 
     }
 }
