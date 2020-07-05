@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
-using ApiTools.Helpers;
 using ApiTools.Models;
 using JetBrains.Annotations;
 using Microsoft.EntityFrameworkCore;
@@ -52,6 +51,7 @@ namespace ApiTools.Context
 
         IQueryable<TModel> ExistQuery(IEnumerable<Expression<Func<TModel, bool>>> expressions,
             ContextOptions options = default);
+
         IQueryable<TModel> Order(IQueryable<TModel> entities, ContextOptions options = default);
         void Detach(TModel entity, ContextOptions options = default);
         Task Save(ContextOptions options = default);
@@ -76,19 +76,10 @@ namespace ApiTools.Context
         /// </summary>
         /// <param name="entities">Entities to be added to the set</param>
         /// <returns></returns>
-        public virtual async Task CreateWithoutSave([NoEnumeration] IEnumerable<TModel> entities,
+        public virtual async Task CreateWithoutSave(IEnumerable<TModel> entities,
             ContextOptions options = default)
         {
-            options = InitiateOptions(options);
-            await _context.AddRangeAsync(entities);
-            // if (options.Upsert)
-            // {
-            //     await _context.AddRangeAsync(entities.AsQueryable()
-            //         .TagWith(UpsertTags.UpsertTag));
-            // }
-            // else
-            // {
-            // }
+            await _context.AddRangeAsync(entities.Cast<object>());
         }
 
         /// <summary>
@@ -98,7 +89,7 @@ namespace ApiTools.Context
         /// <returns></returns>
         public virtual async Task CreateWithoutSave(TModel entity, ContextOptions options = default)
         {
-            await CreateWithoutSave(new[] {entity}, options);
+            await _context.AddAsync(entity);
         }
 
         /// <summary>
@@ -106,12 +97,10 @@ namespace ApiTools.Context
         /// </summary>
         /// <param name="entities">Entities to be added to the database</param>
         /// <returns>Entities after calling <c>Save</c> method</returns>
-        public virtual async Task<IEnumerable<TModel>> Create([NoEnumeration] IEnumerable<TModel> entities,
+        public virtual async Task<IEnumerable<TModel>> Create(IEnumerable<TModel> entities,
             ContextOptions options)
         {
-            options = InitiateOptions(options);
             await CreateWithoutSave(entities, options);
-            options.DetachAfterSave = true;
             await Save(options);
             return entities;
         }
@@ -124,7 +113,8 @@ namespace ApiTools.Context
         public virtual async Task<TModel> Create(TModel entity, ContextOptions options = default)
         {
             options = InitiateOptions(options);
-            await Create(new[] {entity}, options);
+            await _context.AddAsync(entity);
+            await Save(options);
             return entity;
         }
 
@@ -154,7 +144,7 @@ namespace ApiTools.Context
             ContextOptions options = null)
         {
             var query = Find(expression, options);
-            if (query == default) return default;
+            if (query == null) return default;
             var entity = await query.FirstOrDefaultAsync();
             if (options != null && options.Track == false && entity != null) Detach(entity);
             return entity;
@@ -291,23 +281,10 @@ namespace ApiTools.Context
         {
             if (entity != null) _context.Entry(entity).State = EntityState.Detached;
         }
-        protected virtual void Detach(IEnumerable<TModel> entities, ContextOptions options = default)
-        {
-            foreach (var contextEntity in entities)
-            {
-                _context.Entry(contextEntity).State = EntityState.Detached;
-            }
-        }
 
         public virtual async Task Save(ContextOptions options = default)
         {
-            options = InitiateOptions(options);
             await _context.SaveChangesAsync();
-            if (options.DetachAfterSave)
-            {
-                _context.DetachAll();
-            }
-
         }
 
         public virtual Expression<Func<TModel, bool>> FindById(TModelKeyId id, ContextOptions options = default)
@@ -353,6 +330,11 @@ namespace ApiTools.Context
             return entities;
         }
 
+        protected virtual void Detach(IEnumerable<TModel> entities, ContextOptions options = default)
+        {
+            foreach (var contextEntity in entities) _context.Entry(contextEntity).State = EntityState.Detached;
+        }
+
         protected virtual DbSet<TTModel> GetDbSet<TTModel>() where TTModel : class
         {
             return _context.Set<TTModel>();
@@ -363,10 +345,11 @@ namespace ApiTools.Context
             return SetQuery;
         }
 
-        private IQueryable<TTModel> GetSetQuery<TTModel>() where TTModel: class
+        private IQueryable<TTModel> GetSetQuery<TTModel>() where TTModel : class
         {
             return GetDbSet<TTModel>().AsQueryable();
         }
+
         private static Expression<Func<TModel, bool>> _findByIds(IEnumerable<TModelKeyId> ids,
             ContextOptions options)
         {
@@ -384,7 +367,7 @@ namespace ApiTools.Context
             ContextOptions options = default)
         {
             var query = Find(expressions, options);
-            if (query == default) return default;
+            if (query == null) return default;
             return await query.AnyAsync();
         }
 
@@ -392,7 +375,7 @@ namespace ApiTools.Context
             ContextOptions options = default)
         {
             var query = Find(expression, options);
-            if (query == default) return default;
+            if (query == null) return default;
             return await query.LongCountAsync();
         }
 
@@ -409,8 +392,10 @@ namespace ApiTools.Context
         {
             options = InitiateOptions(options);
             var set = _read(options);
-            if (set == null) return default;
+            if (set == null) return null;
             if (expressions == null) return set;
+            if (!expressions.Any()) return set;
+
             if (options.UseAndInMultipleExpressions)
                 return expressions.Aggregate(set, (current, expression) => current.Where(expression));
             return set.Where(OrExpressions(expressions.ToList()));

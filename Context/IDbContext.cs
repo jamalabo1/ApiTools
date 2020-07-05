@@ -41,8 +41,5 @@ namespace ApiTools.Context
         public ValueTask<TEntity> FindAsync<TEntity>([CanBeNull] object[] keyValues,
             CancellationToken cancellationToken)
             where TEntity : class;
-
-        public void DetachAll();
-
     }
 }

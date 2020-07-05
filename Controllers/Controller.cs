@@ -59,7 +59,28 @@ namespace ApiTools.Controllers
         }
 
         [HttpGet]
-        [Route("{id}")]
+        [Route("{field}")]
+        public virtual async Task<IActionResult> GetResourceField([FromRoute] string field)
+        {
+            var rolesResponse = CheckUserRoles(GetResourceField_Roles());
+            if (rolesResponse != null) return rolesResponse;
+
+            var response = await Service.Read(field);
+            return GenerateActionResult(response);
+        }
+
+        [HttpGet]
+        [Route("{id}/{field}")]
+        public virtual async Task<IActionResult> GetResourceField([FromRoute] TModelKeyId id, [FromRoute] string field)
+        {
+            var rolesResponse = CheckUserRoles(GetResourceField_Roles());
+            if (rolesResponse != null) return rolesResponse;
+
+            var response = await Service.Read(id, field);
+            return GenerateActionResult(response);
+        }
+        [HttpGet]
+        [Route("{id:guid}")]
         public virtual async Task<IActionResult> GetResource([FromRoute] TModelKeyId id)
         {
             var rolesResponse = CheckUserRoles(GetResource_Roles());
@@ -69,17 +90,6 @@ namespace ApiTools.Controllers
             var response = await Service.Read(id);
             return GenerateActionResult(response);
         }
-
-        // [HttpGet]
-        // [Route("{id}/{field}")]
-        // public virtual async Task<IActionResult> GetResourceField([FromRoute] TModelKeyId id, [FromRoute] string field)
-        // {
-        //     var rolesResponse = CheckUserRoles(GetResource_Roles());
-        //     if (rolesResponse != null) return rolesResponse;
-        //     var response = await Service.Read(id, field);
-        //     return GenerateActionResult(response);
-        // }
-
 
         [HttpDelete]
         [Route("{id}")]
@@ -105,16 +115,6 @@ namespace ApiTools.Controllers
         }
 
 
-        [HttpGet]
-        [Route("{id}/{field}")]
-        public virtual async Task<IActionResult> GetResourceField([FromRoute] TModelKeyId id, [FromRoute] string field)
-        {
-            var rolesResponse = CheckUserRoles(GetResourceField_Roles());
-            if (rolesResponse != null) return rolesResponse;
-
-            var response = await Service.Read(id, field);
-            return GenerateActionResult(response);
-        }
 
 
      

@@ -41,7 +41,12 @@ namespace ApiTools.Services
         Task<ServiceResponse> Delete(TModelKeyId id);
         Task<ServiceResponse> Delete(IEnumerable<TModelKeyId> ids);
 
-        Task<ServiceResponse<object>> Read(TModelKeyId id, string selectField,
+        Task<ServiceResponse<object>> Read(TModelKeyId id,
+            string selectField,
+            ServiceOptions<TModel> options = default,
+            ContextOptions readOptions = default);
+
+        Task<ServiceResponse<object>> Read(string selectField,
             ServiceOptions<TModel> options = default,
             ContextOptions readOptions = default);
 
@@ -200,6 +205,43 @@ namespace ApiTools.Services
             };
         }
 
+        public async Task<ServiceResponse<object>> Read(string selectField, ServiceOptions<TModel> options = default,
+            ContextOptions readOptions = default)
+        {
+            options ??= new ServiceOptions<TModel>
+            {
+                Filter = true,
+                Includes = ArraySegment<Expression<Func<TModel, dynamic>>>.Empty,
+                Sort = false,
+                EnableDashedProperty = true,
+                EnablePropertyNesting = true,
+                SelectFieldMany = true
+            };
+
+            var query = await ApplyReadOptions(_context.Find(readOptions), options);
+
+            if (query == null) return ServiceResponse<object>.Forbidden;
+
+            var propertyInfo = PropertyHelper.PropertyInfo<TModel>(selectField, options.EnablePropertyNesting,
+                options.MaxPropertyNestingLevel);
+            if (propertyInfo == null) return ServiceResponse<object>.NotFound;
+
+            if (Attribute.IsDefined(propertyInfo, typeof(JsonIgnoreAttribute)) ||
+                Attribute.IsDefined(propertyInfo, typeof(Newtonsoft.Json.JsonIgnoreAttribute)))
+                return ServiceResponse<object>.NotFound;
+
+            var model = await AccessPropertyFunc<TModel>(selectField, propertyInfo, query, options);
+
+            if (model == null) return ServiceResponse<object>.NotFound;
+
+            return new ServiceResponse<object>
+            {
+                Success = true,
+                Response = model,
+                StatusCode = StatusCodes.Status200OK
+            };
+        }
+
         public async Task<ServiceResponse<object>> Read(
             TModelKeyId id,
             string selectField,
@@ -209,7 +251,7 @@ namespace ApiTools.Services
         {
             options ??= new ServiceOptions<TModel>
             {
-                Filter = false,
+                Filter = true,
                 Includes = ArraySegment<Expression<Func<TModel, dynamic>>>.Empty,
                 Sort = false,
                 EnableDashedProperty = true,
@@ -411,7 +453,7 @@ namespace ApiTools.Services
 
         protected virtual async Task<bool> PostCreate(TModel model)
         {
-            return await PostCreate(new []{model});
+            return await PostCreate(new[] {model});
         }
 
         protected virtual Task<bool> PostCreate(IEnumerable<TModel> models)
@@ -425,19 +467,24 @@ namespace ApiTools.Services
             return Task.FromResult(set);
         }
 
-        protected virtual IEnumerable<TProperty> SelectManyNotMapped<T, TProperty>(IEnumerable<T> set, Expression body,
-            ParameterExpression param)
+        protected virtual Task<IQueryable<TProperty>> ApplyFilter<TProperty>(IQueryable<TProperty> set)
         {
-            var expressionSelect = Expression.Lambda<Func<T, IEnumerable<TProperty>>>(body, param);
-            return set.SelectMany(expressionSelect.Compile());
+            return Task.FromResult(set);
         }
 
-        protected virtual TProperty SelectOneNotMapped<T, TProperty>(IEnumerable<T> set, Expression body,
-            ParameterExpression param)
-        {
-            var expressionSelect = Expression.Lambda<Func<T, TProperty>>(body, param);
-            return set.Select(expressionSelect.Compile()).FirstOrDefault();
-        }
+        // protected virtual IEnumerable<TProperty> SelectManyNotMapped<T, TProperty>(IEnumerable<T> set, Expression body,
+        //     ParameterExpression param)
+        // {
+        //     var expressionSelect = Expression.Lambda<Func<T, IEnumerable<TProperty>>>(body, param);
+        //     return set.SelectMany(expressionSelect.Compile());
+        // }
+
+        // protected virtual TProperty SelectOneNotMapped<T, TProperty>(IEnumerable<T> set, Expression body,
+        //     ParameterExpression param)
+        // {
+        //     var expressionSelect = Expression.Lambda<Func<T, TProperty>>(body, param);
+        //     return set.Select(expressionSelect.Compile()).FirstOrDefault();
+        // }
 
         protected virtual async Task<PagingServiceResponse<TProperty>> SelectManyVirtual<T, TProperty>(
             IQueryable<T> query,
@@ -476,23 +523,21 @@ namespace ApiTools.Services
         {
             if (isArray)
             {
-                var expressionSelect = Expression.Lambda<Func<T, TProperty[]>>(body, param);
-                var selectMany = query.Select(expressionSelect);
-                var result = await selectMany.SingleOrDefaultAsync();
-                if (options?.SelectFieldEntityId != null) return result[(int) options.SelectFieldEntityId];
-                return result;
+                var expressionSelect = Expression.Lambda<Func<T, IEnumerable<TProperty>>>(body, param);
+                var selectMany = await query.SelectMany(expressionSelect).ToListAsync();
+                if (options?.SelectFieldEntityId != null) return selectMany[(int) options.SelectFieldEntityId];
+                return selectMany;
             }
             else
             {
-                var expressionSelect = Expression.Lambda<Func<T, List<TProperty>>>(body, param);
-                var selectMany = query.Select(expressionSelect);
-                var result = await selectMany.SingleOrDefaultAsync();
-                if (options?.SelectFieldEntityId != null) return result[(int) options.SelectFieldEntityId];
-                return result;
+                var expressionSelect = Expression.Lambda<Func<T, IEnumerable<TProperty>>>(body, param);
+                var selectMany = await query.SelectMany(expressionSelect).ToListAsync();
+                if (options?.SelectFieldEntityId != null) return selectMany[(int) options.SelectFieldEntityId];
+                return selectMany;
             }
         }
 
-        protected virtual async Task<TProperty> SelectOneVirtual<T, TProperty>(
+        protected virtual async Task<dynamic> SelectOneVirtual<T, TProperty>(
             IQueryable<T> query,
             Expression body,
             ParameterExpression param,
@@ -503,14 +548,16 @@ namespace ApiTools.Services
             var selectMany = query.Select(expressionSelect);
             var selectQuery = SelectQuery(selectMany.AsQueryable());
             if (selectQuery == null) return default;
+            if (options.SelectFieldMany) return await selectMany.ToListAsync();
             return await selectQuery.SingleOrDefaultAsync();
         }
 
-        protected virtual async Task<TProperty> SelectOne<T, TProperty>(IQueryable<T> query, Expression body,
-            ParameterExpression param)
+        protected virtual async Task<dynamic> SelectOne<T, TProperty>(IQueryable<T> query, Expression body,
+            ParameterExpression param, ServiceOptions<TModel> options)
         {
             var expressionSelect = Expression.Lambda<Func<T, TProperty>>(body, param);
             var selectMany = query.Select(expressionSelect);
+            if (options.SelectFieldMany) return await selectMany.ToListAsync();
             return await selectMany.SingleOrDefaultAsync();
         }
 
@@ -536,10 +583,7 @@ namespace ApiTools.Services
 
                 if (Attribute.IsDefined(propertyInfo, typeof(NotMappedAttribute)))
                 {
-                    if (PropertyHelper.IsPropertyAList(propertyInfo))
-                        methodType = GetType().GetMethod(nameof(SelectManyNotMapped), flags);
-                    else
-                        methodType = GetType().GetMethod(nameof(SelectOneNotMapped), flags);
+                    methodType = GetType().GetMethod(nameof(SelectOneNotMapped), flags);
                 }
                 else
                 {
@@ -580,7 +624,11 @@ namespace ApiTools.Services
             }
             else
             {
-                methodType = GetType().GetMethod(nameof(SelectManyFromListVirtual), flags);
+                if (Attribute.IsDefined(propertyInfo, typeof(NotMappedAttribute)))
+                    methodType = GetType().GetMethod(nameof(SelectManyNotMapped), flags);
+                else
+                    methodType = GetType().GetMethod(nameof(SelectManyFromListVirtual), flags);
+
                 parameters.Add(
                     PropertyHelper.AccessPropertyFromName(propertyName, options.EnablePropertyNesting,
                         options.MaxPropertyNestingLevel, options.EnableDashedProperty)
@@ -602,7 +650,7 @@ namespace ApiTools.Services
         }
 
 
-        protected virtual async Task<PagingServiceResponse<object>> SelectManyFromListVirtual<T, T2>(
+        protected virtual async Task<PagingServiceResponse<T2>> SelectManyFromListVirtual<T, T2>(
             IQueryable<T> queryable,
             IEnumerable<string> properties,
             ServiceOptions<TModel> options)
@@ -639,8 +687,9 @@ namespace ApiTools.Services
                 currentType = baseType;
             }
 
-            if (queryResult == null) return PagingServiceResponse<dynamic>.Empty();
-            return await _pagingService.Apply((IQueryable<dynamic>) queryResult);
+            if (queryResult == null) return PagingServiceResponse<T2>.Empty();
+            var filtered = await ApplyFilter((IQueryable<T2>) queryResult);
+            return await _pagingService.Apply(filtered);
         }
 
         protected virtual IQueryable<TProperty> SelectManyQueryFromListVirtual<T, TProperty>(IQueryable<T> query,
@@ -666,23 +715,30 @@ namespace ApiTools.Services
             return selectQuery;
         }
 
-        protected virtual async Task<IEnumerable<TProperty>> SelectManyNotMapped<T, TProperty>(IQueryable<T> set,
+        protected virtual async Task<IEnumerable<TProperty>> SelectManyNotMapped<T, TProperty>(
+            IQueryable<T> set,
             Expression body,
             ParameterExpression param,
-            ServiceOptions<TModel> options)
+            ServiceOptions<TModel> options
+        )
         {
             var expressionSelect = Expression.Lambda<Func<T, IEnumerable<TProperty>>>(body, param);
             var data = await set.ToListAsync();
             return data.SelectMany(expressionSelect.Compile());
         }
 
-        protected virtual async Task<TProperty> SelectOneNotMapped<T, TProperty>(IQueryable<T> set, Expression body,
+        protected virtual async Task<dynamic> SelectOneNotMapped<T, TProperty>(
+            IQueryable<T> set,
+            Expression body,
             ParameterExpression param,
-            ServiceOptions<TModel> options)
+            ServiceOptions<TModel> options
+        )
         {
             var expressionSelect = Expression.Lambda<Func<T, TProperty>>(body, param);
             var data = await set.ToListAsync();
-            return data.Select(expressionSelect.Compile()).FirstOrDefault();
+            var result = data.Select(expressionSelect.Compile());
+            if (options.SelectFieldMany) return result;
+            return result.FirstOrDefault();
         }
     }
 
@@ -715,7 +771,6 @@ namespace ApiTools.Services
 
         public virtual async Task<ServiceResponse<TModel>> Create(TModelData data)
         {
-
             var validationResponse = await ValidateData(data);
             if (!validationResponse.Success) return ServiceResponse<TModel>.FromOtherResponse(validationResponse);
 
@@ -728,6 +783,8 @@ namespace ApiTools.Services
             var relationCreateResponse = await CreateRelationData(createResponse, data);
             if (relationCreateResponse.TriggerSave) await _context.Save();
 
+            PropertyHelper.EmptyRelationalData(new[] {relationCreateResponse.Response});
+
             return relationCreateResponse;
         }
 
@@ -737,10 +794,10 @@ namespace ApiTools.Services
             if (read.Response == null) return ServiceResponse<TModel>.NotFound;
 
             if (!await AuthorizeUpdate(read.Response)) return ServiceResponse<TModel>.Forbidden;
-            
+
             var validationResponse = await ValidateData(data);
             if (!validationResponse.Success) return ServiceResponse<TModel>.FromOtherResponse(validationResponse);
-            
+
             var updateModelResponse = await UpdateModel(read.Response, data);
             if (updateModelResponse.Response == null || updateModelResponse.Success == false)
                 return updateModelResponse;
@@ -762,7 +819,7 @@ namespace ApiTools.Services
 
             var validationResponse = await ValidateData(bulkUpdateModels.Select(x => x.Entity));
             if (!validationResponse.Success) return ServiceResponse<TModel>.FromOtherResponse(validationResponse);
-            
+
             var updateData = new List<(ServiceResponse<TModel>, TModelData)>();
             for (var i = 0; i < models.Count; i++)
             {
@@ -798,8 +855,9 @@ namespace ApiTools.Services
             var modelDataList = dataModels.ToList();
 
             var validationResponse = await ValidateData(modelDataList);
-            if (!validationResponse.Success) return ServiceResponse<IEnumerable<TModel>>.FromOtherResponse(validationResponse);
-            
+            if (!validationResponse.Success)
+                return ServiceResponse<IEnumerable<TModel>>.FromOtherResponse(validationResponse);
+
             var entities = new List<TModel>();
             var data = new List<(ServiceResponse<TModel>, TModelData)>();
             // foreach (var modelData in modelDataList)
@@ -830,7 +888,7 @@ namespace ApiTools.Services
         }
 
         protected virtual async Task<ServiceResponse> BulkCreateOperation(
-            IList<(ServiceResponse<TModel>, TModelData)> data, 
+            IList<(ServiceResponse<TModel>, TModelData)> data,
             IList<TModel> entities,
             ServiceOptions<TModel> options = default)
         {
@@ -848,7 +906,7 @@ namespace ApiTools.Services
 
             if (await PostCreate(entities) || triggerSave) await _context.Save(options?.ContextOptions);
 
-            EmptyRelationalData(entities);
+            PropertyHelper.EmptyRelationalData(entities);
             return new ServiceResponse
             {
                 Success = true
@@ -902,19 +960,6 @@ namespace ApiTools.Services
             });
         }
 
-        protected virtual void EmptyRelationalData(IEnumerable<TModel> entities)
-        {
-            var virtualProperties = typeof(TModel).GetProperties(BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance).Where(x => x.GetAccessors().Any(r => r.IsVirtual));
-            foreach (var property in virtualProperties)
-            {
-                if (property.PropertyType.IsValueType &&
-                    Nullable.GetUnderlyingType(property.PropertyType) == null) continue;
-                foreach (var contextEntity in entities)
-                {
-                    property.SetValue(contextEntity, null);
-                }
-            }
-        }
 
         protected virtual Task<ServiceResponse<TModel>> UpdateModel(TModel model, TModelData data)
         {
@@ -983,35 +1028,49 @@ namespace ApiTools.Services
     }
 
     public class
-        InternalService<TModel, TModelKeyId, TModelData, TResourceProvider> : Service<TModel, TModelKeyId,
+        InternalService<TModel, TModelKeyId, TModelData, TResourceProvider, TFilter> : Service<TModel, TModelKeyId,
             IContext<TModel, TModelKeyId>,
             TModelData>
         where TModel : ContextEntity<TModelKeyId>
         where TModelData : class
         where TModelKeyId : new()
         where TResourceProvider : IResourceQueryProvider
+        where TFilter : IFilter
     {
+        private readonly TFilter _filter;
         private readonly TResourceProvider _resourceQueryProvider;
 
         public InternalService(IContext<TModel, TModelKeyId> context, IAuthorizationService authorization,
             IHttpContextAccessor accessor, IPagingService pagingService, ISort sort, IMapper mapper,
-            TResourceProvider resourceQueryProvider) : base(context,
+            TResourceProvider resourceQueryProvider, TFilter filter) : base(context,
             authorization, accessor, pagingService, sort, mapper)
         {
             _resourceQueryProvider = resourceQueryProvider;
+            _filter = filter;
         }
 
         public InternalService(IContext<TModel, TModelKeyId> context, IAuthorizationService authorization,
             IHttpContextAccessor accessor, IPagingService pagingService, IMapper mapper,
-            TResourceProvider resourceQueryProvider) : base(context, authorization,
+            TResourceProvider resourceQueryProvider, TFilter filter) : base(context, authorization,
             accessor, pagingService, mapper)
         {
             _resourceQueryProvider = resourceQueryProvider;
+            _filter = filter;
         }
 
         protected override IQueryable<TProperty> SelectQuery<TProperty>(IQueryable<TProperty> query)
         {
             return _resourceQueryProvider.GetQuery((dynamic) query);
+        }
+
+        protected override Task<IQueryable<TProperty>> ApplyFilter<TProperty>(IQueryable<TProperty> set)
+        {
+            return Task.FromResult((IQueryable<TProperty>) _filter.ApplyFilter((dynamic) set));
+        }
+
+        protected override Task<IQueryable<TModel>> ApplyFilter(IQueryable<TModel> set)
+        {
+            return Task.FromResult(_filter.ApplyFilter(set));
         }
     }
 }

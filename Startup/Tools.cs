@@ -25,9 +25,10 @@ namespace ApiTools.Startup
         }
     }
 
-    public class StartupTools<TDbContextType, TResourceProvider>
+    public class StartupTools<TDbContextType, TResourceProvider, TFilter>
         where TDbContextType : IDbContext
         where TResourceProvider : IResourceQueryProvider
+        where TFilter : IFilter
     {
         private IServiceCollection Services { get; set; }
 
@@ -45,7 +46,7 @@ namespace ApiTools.Startup
 
             Services
                 .AddScoped<IService<TModel, TModelIdKey, TModelData>,
-                    InternalService<TModel, TModelIdKey, TModelData, TResourceProvider>
+                    InternalService<TModel, TModelIdKey, TModelData, TResourceProvider, TFilter>
                 >();
         }
 

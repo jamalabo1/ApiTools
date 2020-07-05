@@ -37,15 +37,6 @@ namespace ApiTools.Context
 
             return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
         }
-
-        public void DetachAll()
-        {
-            var entityEntries = ChangeTracker.Entries().ToArray();
-
-            foreach (var entityEntry in entityEntries)
-            {
-                entityEntry.State = EntityState.Detached;
-            }
-        }
+ 
     }
 }

@@ -178,5 +178,17 @@ namespace ApiTools.Helpers
                 return propertyInfo.GetGenericArguments().FirstOrDefault();
             return propertyInfo;
         }
+        public static void EmptyRelationalData<T>(IEnumerable<T> entities)
+        {
+            var virtualProperties = typeof(T)
+                .GetProperties(BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance)
+                .Where(x => x.GetAccessors().Any(r => r.IsVirtual));
+            foreach (var property in virtualProperties)
+            {
+                if (property.PropertyType.IsValueType &&
+                    Nullable.GetUnderlyingType(property.PropertyType) == null) continue;
+                foreach (var contextEntity in entities) property.SetValue(contextEntity, null);
+            }
+        }
     }
 }
