@@ -10,7 +10,6 @@ using ApiTools.Context;
 using ApiTools.Extensions;
 using ApiTools.Helpers;
 using ApiTools.Models;
-using ApiTools.Provider;
 using AutoMapper;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Infrastructure;
@@ -20,7 +19,7 @@ using Microsoft.EntityFrameworkCore;
 namespace ApiTools.Services
 {
     public interface IService<TModel, in TModelKeyId>
-        where TModel : ContextEntity<TModelKeyId>
+        where TModel : IContextEntity<TModelKeyId>
         where TModelKeyId : new()
     {
         Task<ServiceResponse<TModel>> Create(TModel model);
@@ -29,6 +28,11 @@ namespace ApiTools.Services
         Task<ServiceResponse<TModel>> Read(TModelKeyId id,
             ServiceOptions<TModel> options = default,
             ContextOptions readOptions = default);
+
+        Task<ServiceResponse<TModel>> Read(Expression<Func<TModel, bool>> expression,
+            ServiceOptions<TModel> options = default,
+            ContextOptions readOptions = default);
+
 
         Task<ServiceResponse<IEnumerable<TModel>>> Read(IEnumerable<TModelKeyId> ids,
             ServiceOptions<TModel> options = default,
@@ -60,7 +64,7 @@ namespace ApiTools.Services
 
     public interface IService<TModel, TModelKeyId, TModelData>
         : IService<TModel, TModelKeyId>
-        where TModel : ContextEntity<TModelKeyId>
+        where TModel : IContextEntity<TModelKeyId>
         where TModelKeyId : new()
     {
         Task<ServiceResponse<TModel>> Create(TModelData data);
@@ -84,23 +88,13 @@ namespace ApiTools.Services
         private readonly IPagingService _pagingService;
         private readonly ISort _sort;
 
-        protected Service(TContext context, IAuthorizationService authorization, IHttpContextAccessor accessor,
-            IPagingService pagingService, ISort sort)
+        protected Service(IServiceHelper<TModel, TModelKeyId> serviceHelper)
         {
-            _context = context;
-            _authorization = authorization;
-            _accessor = accessor;
-            _pagingService = pagingService;
-            _sort = sort;
-        }
-
-        protected Service(TContext context, IAuthorizationService authorization, IHttpContextAccessor accessor,
-            IPagingService pagingService)
-        {
-            _context = context;
-            _authorization = authorization;
-            _accessor = accessor;
-            _pagingService = pagingService;
+            _context = (TContext) serviceHelper.Context;
+            _authorization = serviceHelper.Authorization;
+            _accessor = serviceHelper.Accessor;
+            _pagingService = serviceHelper.PagingService;
+            _sort = serviceHelper.Sort;
         }
 
         protected virtual int MaxBulkLimit { get; set; } = 1000;
@@ -166,15 +160,22 @@ namespace ApiTools.Services
             ServiceOptions<TModel> options = default,
             ContextOptions readOptions = default)
         {
-            var query = await ApplyReadOptions(_context.Find(_context.FindById(id), readOptions), options);
+            return await Read(_context.FindById(id));
+        }
+
+        public async Task<ServiceResponse<TModel>> Read(Expression<Func<TModel, bool>> expression,
+            ServiceOptions<TModel> options = default, ContextOptions readOptions = default)
+        {
+            var query = await ApplyReadOptions(_context.Find(expression, readOptions), options);
 
             if (query == null) return ServiceResponse<TModel>.Forbidden;
 
             var model = await query.SingleOrDefaultAsync();
 
+            if (model == null) return ServiceResponse<TModel>.NotFound;
+
             if (!await AuthorizeRead(model)) return ServiceResponse<TModel>.Forbidden;
 
-            if (model == null) return ServiceResponse<TModel>.NotFound;
 
             return new ServiceResponse<TModel>
             {
@@ -346,7 +347,8 @@ namespace ApiTools.Services
 
         public virtual async Task<ServiceResponse> Update(TModel data)
         {
-            await UpdateWithoutSave(data);
+            var response = await UpdateWithoutSave(data);
+            if (!response.Success) return response;
             await _context.Save();
             var postUpdateResp = await PostUpdate(data);
             if (postUpdateResp.TriggerSave)
@@ -377,6 +379,19 @@ namespace ApiTools.Services
             };
             if (options.Includes != null)
                 query = options.Includes.Aggregate(query, (current, include) => current.Include(include));
+
+            return await ApplyReadOptions<TModel>(query, options);
+        }
+
+        protected virtual async Task<IQueryable<T>> ApplyReadOptions<T>(IQueryable<T> query,
+            ServiceOptions<T> options = default)
+        {
+            if (query == null) return null;
+            options ??= new ServiceOptions<T>
+            {
+                Filter = true,
+                Sort = true
+            };
 
             if (options.Filter) query = await ApplyFilter(query);
             if (options.Sort) query = _sort.SortByKey(query);
@@ -591,7 +606,7 @@ namespace ApiTools.Services
                     {
                         if (PropertyHelper.IsPropertyAList(propertyInfo))
                         {
-                            if (propertyInfo.PropertyType.IsSubclassOf(typeof(DbEntity<>)))
+                            if (propertyInfo.PropertyType.IsSubclassOf(typeof(DbEntity<,,>)))
                                 methodType = GetType().GetMethod(nameof(SelectManyVirtual), flags);
                             else
                                 methodType = GetType().GetMethod(nameof(SelectContextManyVirtual), flags);
@@ -743,33 +758,24 @@ namespace ApiTools.Services
     }
 
     public abstract class
-        Service<TModel, TModelKeyId, TContext, TModelData> : Service<TModel, TModelKeyId, TContext>,
-            IService<TModel, TModelKeyId, TModelData>
+        Service<TModel, TModelKeyId, TContext, TModelDto> : Service<TModel, TModelKeyId, TContext>,
+            IService<TModel, TModelKeyId, TModelDto>
         where TContext : IContext<TModel, TModelKeyId>
         where TModel : ContextEntity<TModelKeyId>
-        where TModelData : class
+        where TModelDto : class
         where TModelKeyId : new()
     {
         private readonly TContext _context;
         private readonly IMapper _mapper;
 
-        protected Service(TContext context, IAuthorizationService authorization, IHttpContextAccessor accessor,
-            IPagingService pagingService, ISort sort, IMapper mapper) : base(context, authorization, accessor,
-            pagingService, sort)
+        protected Service(IServiceHelper<TModel, TModelKeyId> serviceHelper) : base(serviceHelper)
         {
-            _context = context;
-            _mapper = mapper;
+            _context = (TContext) serviceHelper.Context;
+            _mapper = serviceHelper.Mapper;
         }
 
-        protected Service(TContext context, IAuthorizationService authorization,
-            IHttpContextAccessor accessor,
-            IPagingService pagingService, IMapper mapper) : base(context, authorization, accessor, pagingService)
-        {
-            _context = context;
-            _mapper = mapper;
-        }
 
-        public virtual async Task<ServiceResponse<TModel>> Create(TModelData data)
+        public virtual async Task<ServiceResponse<TModel>> Create(TModelDto data)
         {
             var validationResponse = await ValidateData(data);
             if (!validationResponse.Success) return ServiceResponse<TModel>.FromOtherResponse(validationResponse);
@@ -788,7 +794,7 @@ namespace ApiTools.Services
             return relationCreateResponse;
         }
 
-        public virtual async Task<ServiceResponse> Update(TModelKeyId id, TModelData data)
+        public virtual async Task<ServiceResponse> Update(TModelKeyId id, TModelDto data)
         {
             var read = await Read(id, ServiceOptions<TModel>.DisableFilter);
             if (read.Response == null) return ServiceResponse<TModel>.NotFound;
@@ -811,7 +817,7 @@ namespace ApiTools.Services
         }
 
         public virtual async Task<ServiceResponse> Update(
-            IReadOnlyList<BulkUpdateModel<TModelData, TModelKeyId>> bulkUpdateModels)
+            IReadOnlyList<BulkUpdateModel<TModelDto, TModelKeyId>> bulkUpdateModels)
         {
             var modelsReadResponse = await Read(bulkUpdateModels.Select(x => x.Id));
             if (!modelsReadResponse.Success) return modelsReadResponse;
@@ -820,7 +826,7 @@ namespace ApiTools.Services
             var validationResponse = await ValidateData(bulkUpdateModels.Select(x => x.Entity));
             if (!validationResponse.Success) return ServiceResponse<TModel>.FromOtherResponse(validationResponse);
 
-            var updateData = new List<(ServiceResponse<TModel>, TModelData)>();
+            var updateData = new List<(ServiceResponse<TModel>, TModelDto)>();
             for (var i = 0; i < models.Count; i++)
             {
                 var model = models[i];
@@ -849,7 +855,7 @@ namespace ApiTools.Services
             };
         }
 
-        public virtual async Task<ServiceResponse<IEnumerable<TModel>>> Create(IEnumerable<TModelData> dataModels,
+        public virtual async Task<ServiceResponse<IEnumerable<TModel>>> Create(IEnumerable<TModelDto> dataModels,
             ServiceOptions<TModel> options)
         {
             var modelDataList = dataModels.ToList();
@@ -859,7 +865,7 @@ namespace ApiTools.Services
                 return ServiceResponse<IEnumerable<TModel>>.FromOtherResponse(validationResponse);
 
             var entities = new List<TModel>();
-            var data = new List<(ServiceResponse<TModel>, TModelData)>();
+            var data = new List<(ServiceResponse<TModel>, TModelDto)>();
             // foreach (var modelData in modelDataList)
             for (var i = 0; i < modelDataList.Count; i++)
             {
@@ -888,7 +894,7 @@ namespace ApiTools.Services
         }
 
         protected virtual async Task<ServiceResponse> BulkCreateOperation(
-            IList<(ServiceResponse<TModel>, TModelData)> data,
+            IList<(ServiceResponse<TModel>, TModelDto)> data,
             IList<TModel> entities,
             ServiceOptions<TModel> options = default)
         {
@@ -915,7 +921,7 @@ namespace ApiTools.Services
 
 
         protected virtual async Task<ServiceResponse> BulkUpdateOperation(
-            IList<(ServiceResponse<TModel>, TModelData)> updateData)
+            IList<(ServiceResponse<TModel>, TModelDto)> updateData)
         {
             await _context.Save();
             var triggerSave = updateData.Count > 0;
@@ -936,20 +942,20 @@ namespace ApiTools.Services
         }
 
         protected virtual Task<ServiceResponse<TModel>> CreateRelationData(ServiceResponse<TModel> response,
-            TModelData data)
+            TModelDto data)
         {
             response.TriggerSave = false;
             return Task.FromResult(response);
         }
 
         protected virtual Task<ServiceResponse> UpdateRelationData(ServiceResponse<TModel> response,
-            TModelData data)
+            TModelDto data)
         {
             response.TriggerSave = false;
             return Task.FromResult((ServiceResponse) response);
         }
 
-        protected virtual Task<ServiceResponse<TModel>> CreateModel(TModelData data)
+        protected virtual Task<ServiceResponse<TModel>> CreateModel(TModelDto data)
         {
             return Task.FromResult(new ServiceResponse<TModel>
             {
@@ -961,7 +967,7 @@ namespace ApiTools.Services
         }
 
 
-        protected virtual Task<ServiceResponse<TModel>> UpdateModel(TModel model, TModelData data)
+        protected virtual Task<ServiceResponse<TModel>> UpdateModel(TModel model, TModelDto data)
         {
             return Task.FromResult(new ServiceResponse<TModel>
             {
@@ -972,7 +978,7 @@ namespace ApiTools.Services
             });
         }
 
-        protected virtual async Task<ServiceResponse<TModel>> PrepareCreate(TModelData data)
+        protected virtual async Task<ServiceResponse<TModel>> PrepareCreate(TModelDto data)
         {
             var createModelResp = await CreateModel(data);
             if (!createModelResp.Success) return createModelResp;
@@ -982,7 +988,7 @@ namespace ApiTools.Services
                 : createModelResp;
         }
 
-        protected virtual Task<ServiceResponse> ValidateData(IEnumerable<TModelData> data)
+        protected virtual Task<ServiceResponse> ValidateData(IEnumerable<TModelDto> data)
         {
             return Task.FromResult(new ServiceResponse
             {
@@ -990,87 +996,9 @@ namespace ApiTools.Services
             });
         }
 
-        protected virtual async Task<ServiceResponse> ValidateData(TModelData data)
+        protected virtual async Task<ServiceResponse> ValidateData(TModelDto data)
         {
             return await ValidateData(new[] {data});
-        }
-    }
-
-    public class
-        InternalService<TModel, TModelKeyId, TResourceProvider> : Service<TModel, TModelKeyId,
-            IContext<TModel, TModelKeyId>>
-        where TModel : ContextEntity<TModelKeyId>
-        where TModelKeyId : new()
-        where TResourceProvider : IResourceQueryProvider
-    {
-        private readonly TResourceProvider _resourceQueryProvider;
-
-        public InternalService(IContext<TModel, TModelKeyId> context, IAuthorizationService authorization,
-            IHttpContextAccessor accessor, IPagingService pagingService, ISort sort,
-            TResourceProvider resourceQueryProvider) : base(context, authorization,
-            accessor, pagingService, sort)
-        {
-            _resourceQueryProvider = resourceQueryProvider;
-        }
-
-        public InternalService(IContext<TModel, TModelKeyId> context, IAuthorizationService authorization,
-            IHttpContextAccessor accessor, IPagingService pagingService, TResourceProvider resourceQueryProvider) :
-            base(context, authorization, accessor,
-                pagingService)
-        {
-            _resourceQueryProvider = resourceQueryProvider;
-        }
-
-        protected override IQueryable<TProperty> SelectQuery<TProperty>(IQueryable<TProperty> query)
-        {
-            return _resourceQueryProvider.GetQuery((dynamic) query);
-        }
-    }
-
-    public class
-        InternalService<TModel, TModelKeyId, TModelData, TResourceProvider, TFilter> : Service<TModel, TModelKeyId,
-            IContext<TModel, TModelKeyId>,
-            TModelData>
-        where TModel : ContextEntity<TModelKeyId>
-        where TModelData : class
-        where TModelKeyId : new()
-        where TResourceProvider : IResourceQueryProvider
-        where TFilter : IFilter
-    {
-        private readonly TFilter _filter;
-        private readonly TResourceProvider _resourceQueryProvider;
-
-        public InternalService(IContext<TModel, TModelKeyId> context, IAuthorizationService authorization,
-            IHttpContextAccessor accessor, IPagingService pagingService, ISort sort, IMapper mapper,
-            TResourceProvider resourceQueryProvider, TFilter filter) : base(context,
-            authorization, accessor, pagingService, sort, mapper)
-        {
-            _resourceQueryProvider = resourceQueryProvider;
-            _filter = filter;
-        }
-
-        public InternalService(IContext<TModel, TModelKeyId> context, IAuthorizationService authorization,
-            IHttpContextAccessor accessor, IPagingService pagingService, IMapper mapper,
-            TResourceProvider resourceQueryProvider, TFilter filter) : base(context, authorization,
-            accessor, pagingService, mapper)
-        {
-            _resourceQueryProvider = resourceQueryProvider;
-            _filter = filter;
-        }
-
-        protected override IQueryable<TProperty> SelectQuery<TProperty>(IQueryable<TProperty> query)
-        {
-            return _resourceQueryProvider.GetQuery((dynamic) query);
-        }
-
-        protected override Task<IQueryable<TProperty>> ApplyFilter<TProperty>(IQueryable<TProperty> set)
-        {
-            return Task.FromResult((IQueryable<TProperty>) _filter.ApplyFilter((dynamic) set));
-        }
-
-        protected override Task<IQueryable<TModel>> ApplyFilter(IQueryable<TModel> set)
-        {
-            return Task.FromResult(_filter.ApplyFilter(set));
         }
     }
 }

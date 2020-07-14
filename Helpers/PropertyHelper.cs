@@ -190,5 +190,19 @@ namespace ApiTools.Helpers
                 foreach (var contextEntity in entities) property.SetValue(contextEntity, null);
             }
         }
+        
+        public static Type GetModelIdType(Type type)
+        {
+            var baseType = GetBaseType(type);
+            return baseType.GetGenericArguments()[0];
+        }
+
+        public static Type GetBaseType(Type type)
+        {
+            var baseType = type.BaseType;
+            if (baseType == null || baseType.BaseType == null) return type;
+            while (baseType.BaseType?.BaseType != null) baseType = baseType.BaseType;
+            return baseType;
+        }
     }
 }

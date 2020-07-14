@@ -17,8 +17,8 @@ namespace ApiTools.Models
         [JsonProperty("status")]
         public int StatusCode { get; set; }
 
-        public IList<ServiceResponseMessage> Messages { get; set; } =
-            ImmutableList<ServiceResponseMessage>.Empty;
+        public IList<IServiceResponseMessage> Messages { get; set; } =
+            ImmutableList<IServiceResponseMessage>.Empty;
     }
 
     public class ServiceResponse<T> : ServiceResponse
@@ -69,16 +69,16 @@ namespace ApiTools.Models
         public T Response { get; set; }
 
 
-        public static ServiceResponse<T> FromOtherResponse<TOther>(ServiceResponse<TOther> otherResponse)
+        public static ServiceResponse<T> FromOtherResponse<TOther>(ServiceResponse<TOther> otherResponse, T response = default)
         {
-            return FromOtherResponse((ServiceResponse) otherResponse);
+            return FromOtherResponse((ServiceResponse) otherResponse, response);
         }
 
-        public static ServiceResponse<T> FromOtherResponse(ServiceResponse otherResponse)
+        public static ServiceResponse<T> FromOtherResponse(ServiceResponse otherResponse, T response = default)
         {
             return new ServiceResponse<T>
             {
-                Response = default,
+                Response = response,
                 StatusCode = otherResponse.StatusCode,
                 Messages = otherResponse.Messages,
                 Success = otherResponse.Success,

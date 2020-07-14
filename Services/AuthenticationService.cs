@@ -9,17 +9,17 @@ namespace ApiTools.Services
 {
     public interface IAuthenticationService
     {
-        Task<ServiceResponse<LoginResponse>> Authenticate<TModel, TModelId, TKey>(
+        Task<ServiceResponse<ILoginResponse>> Authenticate<TModel, TModelId, TKey>(
             IContext<TModel, TModelId> context,
             AuthenticationOptions<TModel, TModelId> options,
             Expression<Func<TModel, TKey>> keySelector = null
-        )  where TModel : IAccountDbEntity<TModelId> where TModelId : new();
+        )  where TModel : IBaseAccountDbEntity<TModelId> where TModelId : new();
 
-        Task<ServiceResponse<LoginResponse>> Authenticate<TModel, TModelId>(
+        Task<ServiceResponse<ILoginResponse>> Authenticate<TModel, TModelId>(
             IContext<TModel, TModelId> context,
             AuthenticationOptions<TModel, TModelId> options
         )
-            where TModel : IAccountDbEntity<TModelId> where TModelId : new();
+            where TModel : IBaseAccountDbEntity<TModelId> where TModelId : new();
     }
 
     public class AuthenticationService : IAuthenticationService
@@ -33,10 +33,10 @@ namespace ApiTools.Services
             _tokenService = tokenService;
         }
 
-        public async Task<ServiceResponse<LoginResponse>> Authenticate<TModel, TModelId>(
+        public async Task<ServiceResponse<ILoginResponse>> Authenticate<TModel, TModelId>(
             IContext<TModel, TModelId> context,
             AuthenticationOptions<TModel, TModelId> options)
-            where TModel : IAccountDbEntity<TModelId>
+            where TModel : IBaseAccountDbEntity<TModelId>
             where TModelId : new()
         {
             return await Authenticate<TModel, TModelId, Guid>(context, options);
@@ -46,7 +46,7 @@ namespace ApiTools.Services
         protected virtual async Task<ServiceResponse<TModel>> ValidateLogin<TModel, TModelId>(
             IContext<TModel, TModelId> context,
             AuthenticationOptions<TModel, TModelId> options
-        )     where TModel : IAccountDbEntity<TModelId>
+        )     where TModel : IBaseAccountDbEntity<TModelId>
             where TModelId : new()
         {
             var entity = await (options.ContextFind != null
@@ -59,7 +59,7 @@ namespace ApiTools.Services
                 return new ServiceResponse<TModel>
                 {
                     StatusCode = StatusCodes.Status404NotFound,
-                    Messages = new[]
+                    Messages = new IServiceResponseMessage[]
                     {
                         new ServiceResponseMessage
                         {
@@ -82,7 +82,7 @@ namespace ApiTools.Services
                 return new ServiceResponse<TModel>
                 {
                     StatusCode = StatusCodes.Status401Unauthorized,
-                    Messages = new[]
+                    Messages = new IServiceResponseMessage[]
                     {
                         new ServiceResponseMessage
                         {
@@ -99,18 +99,18 @@ namespace ApiTools.Services
                 Success = true
             };
         }
-        public async Task<ServiceResponse<LoginResponse>> Authenticate<TModel, TModelId, TKey>(
+        public async Task<ServiceResponse<ILoginResponse>> Authenticate<TModel, TModelId, TKey>(
             IContext<TModel, TModelId> context,
             AuthenticationOptions<TModel, TModelId> options,
             Expression<Func<TModel, TKey>> keySelector = null
         )
-            where TModel : IAccountDbEntity<TModelId>
+            where TModel : IBaseAccountDbEntity<TModelId>
             where TModelId : new()
         {
             var validateLoginResponse = await ValidateLogin(context, options);
             if (!validateLoginResponse.Success)
             {
-                return ServiceResponse<LoginResponse>.FromOtherResponse(validateLoginResponse);
+                return ServiceResponse<ILoginResponse>.FromOtherResponse(validateLoginResponse);
             }
             var entity = validateLoginResponse.Response;
             var id = keySelector == null ? entity.Id.ToString() : keySelector.Compile().Invoke(entity).ToString();
@@ -121,7 +121,7 @@ namespace ApiTools.Services
         }
 
 
-        protected virtual ServiceResponse<LoginResponse> _resp<TModelId>(string token, string role, TModelId accountId)
+        protected virtual ServiceResponse<ILoginResponse> _resp<TModelId>(string token, string role, TModelId accountId)
         {
             var resp = new LoginResponse
             {
@@ -129,7 +129,7 @@ namespace ApiTools.Services
                 Role = role,
                 AccountId = accountId.ToString()
             };
-            return new ServiceResponse<LoginResponse>
+            return new ServiceResponse<ILoginResponse>
             {
                 Response = resp,
                 StatusCode = StatusCodes.Status200OK,

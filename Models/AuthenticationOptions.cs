@@ -12,7 +12,7 @@ namespace ApiTools.Models
         public Expression<Func<TModel, bool>> Expression { get; set; }
         public string Password { get; set; }
         public string Role { get; set; }
-        public IEnumerable<Func<TModel, ServiceResponse<LoginResponse>>> ValidationOptions { get; set; }
+        public IEnumerable<Func<TModel, ServiceResponse<ILoginResponse>>> ValidationOptions { get; set; }
         
         
     }

@@ -3,14 +3,17 @@ using System.Collections.Generic;
 
 namespace ApiTools.Models
 {
-    public interface IDbEntity<T> : IContextEntity<T> where T : new()
+    public interface IBaseDbEntity<T> : IContextEntity<T> where T : new()
     {
-        public DateTimeOffset CreationTime { get; set; }
-        public DateTimeOffset ModificationTime { get; set; }
     }
-    public abstract class  DbEntity<T> : ContextEntity<T> where T : new()
+    public interface IDbEntity<T, TCreationTime, TModificationTime> : IBaseDbEntity<T> where T : new()
     {
-        public DateTimeOffset CreationTime { get; set; }
-        public DateTimeOffset ModificationTime { get; set; }
+        public TCreationTime CreationTime { get; set; }
+        public TModificationTime ModificationTime { get; set; }
+    }
+    public abstract class DbEntity<T, TCreationTime, TModificationTime> : ContextEntity<T>, IBaseDbEntity<T> where T : new()
+    {
+        public TCreationTime CreationTime { get; set; }
+        public TModificationTime ModificationTime { get; set; }
     }
 }

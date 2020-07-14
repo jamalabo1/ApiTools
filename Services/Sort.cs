@@ -38,8 +38,5 @@ namespace ApiTools.Services
 
             return set;
         }
-
-
- 
     }
 }

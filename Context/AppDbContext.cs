@@ -3,7 +3,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace ApiTools.Context
 {
@@ -11,10 +10,16 @@ namespace ApiTools.Context
     {
         public AppDbContext(DbContextOptions options) : base(options)
         {
-   
         }
 
-        public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess,
+        public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess,
+            CancellationToken cancellationToken = default)
+        {
+            _SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+            return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+
+        protected virtual void _SaveChangesAsync(bool acceptAllChangesOnSuccess,
             CancellationToken cancellationToken = default)
         {
             var addedEntities = ChangeTracker.Entries().Where(e => e.State == EntityState.Added).ToList();
@@ -34,9 +39,6 @@ namespace ApiTools.Context
                 if (e.Properties.Any(x => x.Metadata.Name == "ModificationTime"))
                     e.Property("ModificationTime").CurrentValue = DateTimeOffset.Now;
             });
-
-            return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
         }
- 
     }
 }

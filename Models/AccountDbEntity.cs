@@ -1,14 +1,19 @@
 ﻿using System.Text.Json.Serialization;
+using ApiTools.Context;
 
 namespace ApiTools.Models
 {
-    public interface IAccountDbEntity<TAccountIdType> : IDbEntity<TAccountIdType> where TAccountIdType : new()
+    public interface IBaseAccountDbEntity<TAccountIdType> : IContextEntity<TAccountIdType> where TAccountIdType : new()
     {
         [JsonIgnore] public string Password { get; set; }
     }
-
-    public class AccountDbEntity<TAccountIdType> : DbEntity<TAccountIdType> where TAccountIdType : new()
+    public interface IAccountDbEntity<TAccountIdType, TCreationTime, TModificationTime> : IDbEntity<TAccountIdType, TCreationTime, TModificationTime>, IBaseAccountDbEntity<TAccountIdType> where TAccountIdType : new()
     {
-        [JsonIgnore] public string Password { get; set; }
+    }
+
+    public class AccountDbEntity<TAccountIdType, TCreationTime, TModificationTime> : DbEntity<TAccountIdType, TCreationTime, TModificationTime>, IBaseAccountDbEntity<TAccountIdType> where TAccountIdType : new()
+    {
+        [JsonIgnore]
+        public string Password { get; set; }
     }
 }

@@ -27,14 +27,21 @@ namespace ApiTools.Controllers
     }
 
     [ApiController]
-    public abstract class SuperController<TModel, TModelKeyId, TService> : Controller
-        where TModel : DbEntity<TModelKeyId>
-        where TService : IService<TModel, TModelKeyId>
+    public abstract class
+        SuperController<TModel, TModelKeyId, TService, TModelDto> : Controller
+        where TModel : IBaseDbEntity<TModelKeyId>
+        where TService : IService<TModel, TModelKeyId, TModelDto>
         where TModelKeyId : new()
+        where TModelDto : class
     {
-        protected abstract TService Service { get; }
+        public SuperController(IServiceHelper<TModel, TModelKeyId, TModelDto> serviceHelper)
+        {
+            Service = (TService) serviceHelper.Service;
+            Mapper = serviceHelper.Mapper;
+        }
 
-        protected virtual IMapper Mapper { get; set; }
+        protected TService Service { get; }
+        protected IMapper Mapper { get; set; }
 
         [CanBeNull]
         protected IActionResult CheckUserRoles(RouteRules routeRules)
@@ -55,12 +62,42 @@ namespace ApiTools.Controllers
             if (rolesResponse != null) return rolesResponse;
 
             var response = await Service.Read();
-            return GenerateActionResult(response);
+            return GenerateActionResult(MapDto(response));
+        }
+
+
+        private ServiceResponse<TModelDto> MapDto(ServiceResponse<TModel> response)
+        {
+            return ServiceResponse<TModelDto>.FromOtherResponse(response, MapDto(response.Response));
+        }
+
+        private ServiceResponse<IEnumerable<TModelDto>> MapDto(ServiceResponse<IEnumerable<TModel>> response)
+        {
+            return ServiceResponse<IEnumerable<TModelDto>>.FromOtherResponse(response, MapDto(response.Response));
+        }
+
+        private ServiceResponse<PagingServiceResponse<TModelDto>> MapDto(
+            ServiceResponse<PagingServiceResponse<TModel>> response)
+        {
+            return ServiceResponse<PagingServiceResponse<TModelDto>>.FromOtherResponse(response,
+                response.Response.ToOtherResponse(MapDto(response.Response.Data)
+                )
+            );
+        }
+
+        private TModelDto MapDto(TModel data)
+        {
+            return Mapper.Map<TModelDto>(data);
+        }
+
+        private IEnumerable<TModelDto> MapDto(IEnumerable<TModel> data)
+        {
+            return Mapper.Map<IEnumerable<TModelDto>>(data);
         }
 
         [HttpGet]
         [Route("{field}")]
-        public virtual async Task<IActionResult> GetResourceField([FromRoute] string field)
+        public virtual async Task<IActionResult> GetResourcesField([FromRoute] string field)
         {
             var rolesResponse = CheckUserRoles(GetResourceField_Roles());
             if (rolesResponse != null) return rolesResponse;
@@ -79,6 +116,7 @@ namespace ApiTools.Controllers
             var response = await Service.Read(id, field);
             return GenerateActionResult(response);
         }
+
         [HttpGet]
         [Route("{id:guid}")]
         public virtual async Task<IActionResult> GetResource([FromRoute] TModelKeyId id)
@@ -88,7 +126,7 @@ namespace ApiTools.Controllers
 
 
             var response = await Service.Read(id);
-            return GenerateActionResult(response);
+            return GenerateActionResult(MapDto(response));
         }
 
         [HttpDelete]
@@ -115,10 +153,6 @@ namespace ApiTools.Controllers
         }
 
 
-
-
-     
-        
         [HttpGet]
         [Route("{id}/{field}/{fieldId}")]
         public virtual async Task<IActionResult> GetResourceArrayFieldItem([FromRoute] TModelKeyId id,
@@ -134,7 +168,7 @@ namespace ApiTools.Controllers
 
         protected virtual IActionResult GenerateActionResult(ServiceResponse response)
         {
-            if ((!response.Success && response.Messages.Count == 0) ||
+            if (!response.Success && response.Messages.Count == 0 ||
                 response.StatusCode == StatusCodes.Status204NoContent) return StatusCode(response.StatusCode);
             return StatusCode(response.StatusCode, response);
         }
@@ -184,6 +218,7 @@ namespace ApiTools.Controllers
         {
             return UpdateResources_Roles();
         }
+
         protected virtual RouteRules UpdateResource_Roles()
         {
             return DefaultShared_Roles();
@@ -214,42 +249,34 @@ namespace ApiTools.Controllers
         {
             return null;
         }
-    }
 
-    public abstract class
-        SuperController<TModel, TModelKeyId, TService, TModelData> : SuperController<TModel, TModelKeyId, TService>
-        where TModel : DbEntity<TModelKeyId>
-        where TService : IService<TModel, TModelKeyId, TModelData>
-        where TModelKeyId : new()
-        where TModelData : class
-    {
         [HttpPost]
         [Route("")]
-        public virtual async Task<IActionResult> CreateResource([FromBody] TModelData data)
+        public virtual async Task<IActionResult> CreateResource([FromBody] TModelDto data)
         {
             var rolesResponse = CheckUserRoles(CreateResource_Roles());
             if (rolesResponse != null) return rolesResponse;
 
 
             var response = await Service.Create(data);
-            return GenerateActionResult(response);
+            return GenerateActionResult(MapDto(response));
         }
 
         [HttpPost]
         [Route("bulk")]
-        public virtual async Task<IActionResult> CreateResources([FromBody] IEnumerable<TModelData> data)
+        public virtual async Task<IActionResult> CreateResources([FromBody] IEnumerable<TModelDto> data)
         {
             var rolesResponse = CheckUserRoles(CreateResources_Roles());
             if (rolesResponse != null) return rolesResponse;
 
 
             var response = await Service.Create(data);
-            return GenerateActionResult(response);
+            return GenerateActionResult(MapDto(response));
         }
 
         [HttpPut]
         [Route("{id}")]
-        public virtual async Task<IActionResult> UpdateResource([FromRoute] TModelKeyId id, [FromBody] TModelData data)
+        public virtual async Task<IActionResult> UpdateResource([FromRoute] TModelKeyId id, [FromBody] TModelDto data)
         {
             var rolesResponse = CheckUserRoles(UpdateResource_Roles());
             if (rolesResponse != null) return rolesResponse;
@@ -262,7 +289,7 @@ namespace ApiTools.Controllers
         [HttpPut]
         [Route("bulk")]
         public virtual async Task<IActionResult> UpdateResources(
-            [FromBody] List<BulkUpdateModel<TModelData, TModelKeyId>> bulkUpdateModels)
+            [FromBody] List<BulkUpdateModel<TModelDto, TModelKeyId>> bulkUpdateModels)
         {
             var rolesResponse = CheckUserRoles(UpdateResources_Roles());
             if (rolesResponse != null) return rolesResponse;
@@ -283,10 +310,10 @@ namespace ApiTools.Controllers
         //     var response = await Service.CreateOrUpdate(entities);
         //     return GenerateActionResult(response);
         // }
-        
+
         [HttpPatch("{id}")]
         public virtual async Task<IActionResult> Patch([FromRoute] TModelKeyId id,
-            [FromBody] JsonPatchDocument<TModelData> dataPatch)
+            [FromBody] JsonPatchDocument<TModelDto> dataPatch)
         {
             if (Mapper == null) return GenerateActionResult(404, null);
             var rolesResponse = CheckUserRoles(UpdatePartialResource_Roles());
@@ -297,7 +324,7 @@ namespace ApiTools.Controllers
             var model = response.Response;
 
 
-            var modelDto = Mapper.Map<TModelData>(model);
+            var modelDto = Mapper.Map<TModelDto>(model);
 
             dataPatch.ApplyTo(modelDto);
 

@@ -8,7 +8,14 @@
         Error = 4
     }
 
-    public class ServiceResponseMessage
+    public interface IServiceResponseMessage
+    {
+        public string Message { get; set; }
+        public string Code { get; set; }
+        public MessageType Type { get; set; }
+        public bool IsError => Type == MessageType.Error;
+    }
+    public class ServiceResponseMessage : IServiceResponseMessage
     {
         public string Message { get; set; }
         public string Code { get; set; }

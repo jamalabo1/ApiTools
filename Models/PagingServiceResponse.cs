@@ -21,5 +21,23 @@ namespace ApiTools.Models
                 Data = Enumerable.Empty<T>()
             };
         }
+
+        
+    }
+
+    public static class PagingServiceResponse
+    {
+        public static PagingServiceResponse<TOther> ToOtherResponse<T, TOther>(this PagingServiceResponse<T> response,
+            IEnumerable<TOther> data = default)
+        {
+            return new PagingServiceResponse<TOther>
+            {
+                CurrentSize = response.CurrentSize,
+                Page = response.Page,
+                Size = response.Size,
+                PerPage = response.PerPage,
+                Data = data
+            };
+        }
     }
 }
