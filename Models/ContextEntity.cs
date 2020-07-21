@@ -1,4 +1,4 @@
-﻿﻿namespace ApiTools.Models
+﻿﻿﻿namespace ApiTools.Models
 {
     public interface IContextEntity<T> where T: new()
     {

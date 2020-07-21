@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
 
@@ -16,7 +16,7 @@ namespace ApiTools.Models
 
         public bool Filter { get; set; } = true;
         public bool Sort { get; set; } = true;
-        public long? SelectFieldEntityId = null;
+        public string SelectFieldEntityId = null;
 
         public bool SelectFieldMany { get; set; } = false;
         public ContextOptions ContextOptions { get; set; }

@@ -13,22 +13,37 @@ namespace ApiTools.Services
         IPagingService PagingService { get; }
         ISort Sort { get; }
         IMapper Mapper { get; }
+        IPasswordService PasswordService { get; }
+        ITokenService TokenService { get; }
+        IMapperHelper MapperHelper { get; set; }
     }
 
     public class ServiceHelper : IServiceHelper
     {
         public ServiceHelper(IAuthorizationService authorization, IHttpContextAccessor accessor,
-            IPagingService pagingService, ISort sort, IMapper mapper)
+            IPagingService pagingService, ISort sort, IMapper mapper, IPasswordService passwordService,
+            ITokenService tokenService, IMapperHelper mapperHelper)
         {
             Authorization = authorization;
             Accessor = accessor;
             PagingService = pagingService;
             Sort = sort;
             Mapper = mapper;
+            PasswordService = passwordService;
+            TokenService = tokenService;
+            MapperHelper = mapperHelper;
         }
 
-        public ServiceHelper(IServiceHelper serviceHelper) : this(serviceHelper.Authorization, serviceHelper.Accessor,
-            serviceHelper.PagingService, serviceHelper.Sort, serviceHelper.Mapper)
+        protected ServiceHelper(IServiceHelper serviceHelper) : this(
+            serviceHelper.Authorization,
+            serviceHelper.Accessor,
+            serviceHelper.PagingService,
+            serviceHelper.Sort,
+            serviceHelper.Mapper,
+            serviceHelper.PasswordService,
+            serviceHelper.TokenService,
+            serviceHelper.MapperHelper
+        )
         {
         }
 
@@ -37,6 +52,9 @@ namespace ApiTools.Services
         public IPagingService PagingService { get; }
         public ISort Sort { get; }
         public IMapper Mapper { get; }
+        public IPasswordService PasswordService { get; }
+        public ITokenService TokenService { get; }
+        public IMapperHelper MapperHelper { get; set; }
     }
 
     public interface IServiceHelper<TModel, in TModelKeyId> : IServiceHelper
@@ -54,7 +72,7 @@ namespace ApiTools.Services
             Context = context;
         }
 
-        public ServiceHelper(IServiceHelper<TModel, TModelKeyId> serviceHelper) : this(serviceHelper,
+        protected ServiceHelper(IServiceHelper<TModel, TModelKeyId> serviceHelper) : this(serviceHelper,
             serviceHelper.Context)
         {
         }
@@ -64,18 +82,24 @@ namespace ApiTools.Services
 
 
     public interface IServiceHelper<TModel, TModelKeyId, TModelDto> : IServiceHelper<TModel, TModelKeyId>
-        where TModel : IContextEntity<TModelKeyId> where TModelKeyId : new()
+        where TModel : IContextEntity<TModelKeyId> where TModelKeyId : new() where TModelDto : IDtoModel<TModelKeyId>
     {
         IService<TModel, TModelKeyId, TModelDto> Service { get; }
     }
 
-    public class ServiceHelper<TModel, TModelKeyId, TModelDto> : ServiceHelper<TModel, TModelKeyId>, IServiceHelper<TModel, TModelKeyId, TModelDto>
-        where TModel : IContextEntity<TModelKeyId> where TModelKeyId : new()
+    public class ServiceHelper<TModel, TModelKeyId, TModelDto> : ServiceHelper<TModel, TModelKeyId>,
+        IServiceHelper<TModel, TModelKeyId, TModelDto>
+        where TModel : IContextEntity<TModelKeyId> where TModelKeyId : new() where TModelDto : IDtoModel<TModelKeyId>
     {
         public ServiceHelper(IServiceHelper<TModel, TModelKeyId> serviceHelper,
             IService<TModel, TModelKeyId, TModelDto> service) : base(serviceHelper)
         {
             Service = service;
+        }
+
+        protected ServiceHelper(IServiceHelper<TModel, TModelKeyId, TModelDto> serviceHelper) : this(serviceHelper,
+            serviceHelper.Service)
+        {
         }
 
         public IService<TModel, TModelKeyId, TModelDto> Service { get; }

@@ -9,13 +9,13 @@ namespace ApiTools.Services
 {
     public interface IAuthenticationService
     {
-        Task<ServiceResponse<ILoginResponse>> Authenticate<TModel, TModelId, TKey>(
+        Task<IServiceResponse<ILoginResponse>> Authenticate<TModel, TModelId, TKey>(
             IContext<TModel, TModelId> context,
             AuthenticationOptions<TModel, TModelId> options,
             Expression<Func<TModel, TKey>> keySelector = null
-        )  where TModel : IBaseAccountDbEntity<TModelId> where TModelId : new();
+        ) where TModel : IBaseAccountDbEntity<TModelId> where TModelId : new();
 
-        Task<ServiceResponse<ILoginResponse>> Authenticate<TModel, TModelId>(
+        Task<IServiceResponse<ILoginResponse>> Authenticate<TModel, TModelId>(
             IContext<TModel, TModelId> context,
             AuthenticationOptions<TModel, TModelId> options
         )
@@ -27,13 +27,13 @@ namespace ApiTools.Services
         private readonly IPasswordService _passwordService;
         private readonly ITokenService _tokenService;
 
-        public AuthenticationService(ITokenService tokenService, IPasswordService passwordService)
+        public AuthenticationService(IServiceHelper serviceHelper)
         {
-            _passwordService = passwordService;
-            _tokenService = tokenService;
+            _passwordService = serviceHelper.PasswordService;
+            _tokenService = serviceHelper.TokenService;
         }
 
-        public async Task<ServiceResponse<ILoginResponse>> Authenticate<TModel, TModelId>(
+        public async Task<IServiceResponse<ILoginResponse>> Authenticate<TModel, TModelId>(
             IContext<TModel, TModelId> context,
             AuthenticationOptions<TModel, TModelId> options)
             where TModel : IBaseAccountDbEntity<TModelId>
@@ -42,11 +42,31 @@ namespace ApiTools.Services
             return await Authenticate<TModel, TModelId, Guid>(context, options);
         }
 
+        public async Task<IServiceResponse<ILoginResponse>> Authenticate<TModel, TModelId, TKey>(
+            IContext<TModel, TModelId> context,
+            AuthenticationOptions<TModel, TModelId> options,
+            Expression<Func<TModel, TKey>> keySelector = null
+        )
+            where TModel : IBaseAccountDbEntity<TModelId>
+            where TModelId : new()
+        {
+            var validateLoginResponse = await ValidateLogin(context, options);
+            if (!validateLoginResponse.Success)
+                return validateLoginResponse.ToOtherResponse<ILoginResponse>();
 
-        protected virtual async Task<ServiceResponse<TModel>> ValidateLogin<TModel, TModelId>(
+            var entity = validateLoginResponse.Response;
+            var id = keySelector == null ? entity.Id.ToString() : keySelector.Compile().Invoke(entity).ToString();
+            var token = _tokenService.GenerateToken(
+                _tokenService.GenerateClaims(id, options.Role)
+            );
+            return _resp(token, options.Role, entity.Id);
+        }
+
+
+        protected virtual async Task<IServiceResponse<TModel>> ValidateLogin<TModel, TModelId>(
             IContext<TModel, TModelId> context,
             AuthenticationOptions<TModel, TModelId> options
-        )     where TModel : IBaseAccountDbEntity<TModelId>
+        ) where TModel : IBaseAccountDbEntity<TModelId>
             where TModelId : new()
         {
             var entity = await (options.ContextFind != null
@@ -54,7 +74,7 @@ namespace ApiTools.Services
                 : context.FindOne(
                     options.Expression,
                     ContextOptions.DisableQuery));
-            
+
             if (entity == null)
                 return new ServiceResponse<TModel>
                 {
@@ -75,7 +95,7 @@ namespace ApiTools.Services
                 foreach (var optionsValidationOption in options.ValidationOptions)
                 {
                     var validationResponse = optionsValidationOption(entity);
-                    if (!validationResponse.Success) return ServiceResponse<TModel>.FromOtherResponse(validationResponse);
+                    if (!validationResponse.Success) return validationResponse.ToOtherResponse<TModel>();
                 }
 
             if (!_passwordService.ValidatePassword(options.Password, entity.Password))
@@ -98,26 +118,6 @@ namespace ApiTools.Services
                 Response = entity,
                 Success = true
             };
-        }
-        public async Task<ServiceResponse<ILoginResponse>> Authenticate<TModel, TModelId, TKey>(
-            IContext<TModel, TModelId> context,
-            AuthenticationOptions<TModel, TModelId> options,
-            Expression<Func<TModel, TKey>> keySelector = null
-        )
-            where TModel : IBaseAccountDbEntity<TModelId>
-            where TModelId : new()
-        {
-            var validateLoginResponse = await ValidateLogin(context, options);
-            if (!validateLoginResponse.Success)
-            {
-                return ServiceResponse<ILoginResponse>.FromOtherResponse(validateLoginResponse);
-            }
-            var entity = validateLoginResponse.Response;
-            var id = keySelector == null ? entity.Id.ToString() : keySelector.Compile().Invoke(entity).ToString();
-            var token = _tokenService.GenerateToken(
-                _tokenService.GenerateClaims(id, options.Role)
-            );
-            return _resp(token, options.Role, entity.Id);
         }
 
 

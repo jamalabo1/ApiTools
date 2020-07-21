@@ -1,8 +1,7 @@
 ﻿namespace ApiTools.Models
 {
-    public class BulkUpdateModel<TModel, TModelKeyId>
+    public class BulkUpdateModel<TModelDto, TModelKeyId> where TModelDto : IDtoModel<TModelKeyId>
     {
-        public TModel Entity { get; set; }
-        public TModelKeyId Id { get; set; }
+        public TModelDto Entity { get; set; }
     }
 }

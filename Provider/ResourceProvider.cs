@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Linq;
 using ApiTools.Extensions;
-using Microsoft.AspNetCore.Http;
+using ApiTools.Services;
 
 namespace ApiTools.Provider
 {
@@ -15,9 +15,9 @@ namespace ApiTools.Provider
         protected readonly Guid UserId;
         protected readonly string UserRole;
 
-        public ResourceQueryProvider(IHttpContextAccessor accessor)
+        public ResourceQueryProvider(IServiceHelper serviceHelper)
         {
-            var user = accessor?.HttpContext?.User;
+            var user = serviceHelper.Accessor.HttpContext.User;
             if (user == null) return;
             UserId = user.GetUserId();
             UserRole = user.GetUserRole();

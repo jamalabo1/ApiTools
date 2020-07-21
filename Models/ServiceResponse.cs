@@ -6,7 +6,64 @@ using Newtonsoft.Json;
 
 namespace ApiTools.Models
 {
-    public class ServiceResponse
+    public interface IServiceResponse
+    {
+        static readonly IServiceResponse Ok = new ServiceResponse
+        {
+            StatusCode = StatusCodes.Status200OK,
+            Success = true
+        };
+
+        static readonly IServiceResponse NoContent = new ServiceResponse
+        {
+            StatusCode = StatusCodes.Status204NoContent,
+            Success = true
+        };
+
+        static readonly IServiceResponse BadRequest = new ServiceResponse
+        {
+            StatusCode = StatusCodes.Status400BadRequest,
+            Success = false
+        };
+
+        static readonly IServiceResponse UnAuthorized = new ServiceResponse
+        {
+            StatusCode = StatusCodes.Status401Unauthorized,
+            Success = false
+        };
+
+        static readonly IServiceResponse Forbidden = new ServiceResponse
+        {
+            StatusCode = StatusCodes.Status403Forbidden,
+            Success = false
+        };
+
+        static readonly IServiceResponse NotFound = new ServiceResponse
+        {
+            StatusCode = StatusCodes.Status404NotFound,
+            Success = false
+        };
+
+        static readonly IServiceResponse InternalServerError = new ServiceResponse
+        {
+            StatusCode = StatusCodes.Status500InternalServerError,
+            Success = false
+        };
+
+        public bool Success { get; set; }
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool TriggerSave { get; set; }
+
+        [JsonPropertyName("status")]
+        [JsonProperty("status")]
+        public int StatusCode { get; set; }
+
+        public IList<IServiceResponseMessage> Messages { get; set; }
+        public IServiceResponse<TO> ToOtherResponse<TO>(TO response = default);
+    }
+
+    public class ServiceResponse : IServiceResponse
     {
         public bool Success { get; set; }
 
@@ -19,71 +76,44 @@ namespace ApiTools.Models
 
         public IList<IServiceResponseMessage> Messages { get; set; } =
             ImmutableList<IServiceResponseMessage>.Empty;
+
+        public virtual IServiceResponse<TO> ToOtherResponse<TO>(TO response = default)
+        {
+            return new ServiceResponse<TO>
+            {
+                Response = response,
+                StatusCode = StatusCode,
+                Messages = Messages,
+                Success = Success,
+                TriggerSave = TriggerSave
+            };
+        }
     }
 
-    public class ServiceResponse<T> : ServiceResponse
+    public interface IServiceResponse<T> : IServiceResponse
     {
-        public static readonly ServiceResponse<T> Ok = new ServiceResponse<T>
-        {
-            StatusCode = StatusCodes.Status200OK,
-            Success = true
-        };
+        // public ServiceResponse<TO> ToOtherResponse<TO>();
+        public static readonly IServiceResponse<T> Ok = IServiceResponse.Ok.ToOtherResponse<T>();
+        public static readonly IServiceResponse<T> NoContent = IServiceResponse.NoContent.ToOtherResponse<T>();
+        public static readonly IServiceResponse<T> BadRequest = IServiceResponse.BadRequest.ToOtherResponse<T>();
+        public static readonly IServiceResponse<T> UnAuthorized = IServiceResponse.UnAuthorized.ToOtherResponse<T>();
+        public static readonly IServiceResponse<T> Forbidden = IServiceResponse.Forbidden.ToOtherResponse<T>();
+        public static readonly IServiceResponse<T> NotFound = IServiceResponse.NotFound.ToOtherResponse<T>();
 
-        public static readonly ServiceResponse<T> NoContent = new ServiceResponse<T>
-        {
-            StatusCode = StatusCodes.Status204NoContent,
-            Success = true
-        };
+        public static readonly IServiceResponse<T> InternalServerError =
+            IServiceResponse.InternalServerError.ToOtherResponse<T>();
 
-        public static readonly ServiceResponse<T> BadRequest = new ServiceResponse<T>
-        {
-            StatusCode = StatusCodes.Status400BadRequest,
-            Success = false
-        };
+        public T Response { get; set; }
+    }
 
-        public static readonly ServiceResponse<T> UnAuthorized = new ServiceResponse<T>
-        {
-            StatusCode = StatusCodes.Status401Unauthorized,
-            Success = false
-        };
-
-        public static readonly ServiceResponse<T> Forbidden = new ServiceResponse<T>
-        {
-            StatusCode = StatusCodes.Status403Forbidden,
-            Success = false
-        };
-
-        public static readonly ServiceResponse<T> NotFound = new ServiceResponse<T>
-        {
-            StatusCode = StatusCodes.Status404NotFound,
-            Success = false
-        };
-
-        public static readonly ServiceResponse<T> InternalServerError = new ServiceResponse<T>
-        {
-            StatusCode = StatusCodes.Status500InternalServerError,
-            Success = false
-        };
-
-
+    public class ServiceResponse<T> : ServiceResponse, IServiceResponse<T>
+    {
         public T Response { get; set; }
 
 
-        public static ServiceResponse<T> FromOtherResponse<TOther>(ServiceResponse<TOther> otherResponse, T response = default)
-        {
-            return FromOtherResponse((ServiceResponse) otherResponse, response);
-        }
-
-        public static ServiceResponse<T> FromOtherResponse(ServiceResponse otherResponse, T response = default)
-        {
-            return new ServiceResponse<T>
-            {
-                Response = response,
-                StatusCode = otherResponse.StatusCode,
-                Messages = otherResponse.Messages,
-                Success = otherResponse.Success,
-                TriggerSave = otherResponse.TriggerSave
-            };
-        }
+        // public ServiceResponse<TO> ToOtherResponse<TO>()
+        // {
+        //     return base.ToOtherResponse<TO>();
+        // }
     }
 }

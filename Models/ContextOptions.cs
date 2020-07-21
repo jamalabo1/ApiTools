@@ -6,6 +6,7 @@
         public static readonly ContextOptions DisableTrack = new ContextOptions {Track = false};
         public static readonly ContextOptions DisableQuery = new ContextOptions {Query = false};
         public static readonly ContextOptions EnableAllExist = new ContextOptions {AllExist = true};
+        public static readonly ContextOptions OrExpressions = new ContextOptions {AllExist = false, UseAndInMultipleExpressions = false};
 
         /// <summary>
         ///     Call GetQueryProvider on the entities,
@@ -48,6 +49,5 @@
         public bool Upsert { get; set; }
 
         public bool DetachAfterSave { get; set; }
-
     }
 }
