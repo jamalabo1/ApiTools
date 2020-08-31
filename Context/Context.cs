@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
+using ApiTools.Extensions;
 using ApiTools.Models;
 using JetBrains.Annotations;
 using Microsoft.EntityFrameworkCore;
@@ -25,6 +26,7 @@ namespace ApiTools.Context
 
         IQueryable<TModel> Find(Expression<Func<TModel, bool>> expression, ContextOptions options = default);
 
+        [CanBeNull]
         IQueryable<TModel> Find(IEnumerable<Expression<Func<TModel, bool>>> expressions,
             ContextOptions options = default);
 
@@ -48,17 +50,20 @@ namespace ApiTools.Context
         Task<bool> Exist(Expression<Func<TModel, bool>> expression, ContextOptions options = default);
         Task<bool> Exist(IEnumerable<TModelKeyId> ids, ContextOptions options = default);
         Task<bool> Exist(IEnumerable<Expression<Func<TModel, bool>>> expressions, ContextOptions options = default);
+        Task<bool> ExistAll(IEnumerable<Expression<Func<TModel, bool>>> expressions, ContextOptions options = default);
 
         IQueryable<TModel> ExistQuery(IEnumerable<Expression<Func<TModel, bool>>> expressions,
             ContextOptions options = default);
 
         IQueryable<TModel> Order(IQueryable<TModel> entities, ContextOptions options = default);
         void Detach(TModel entity, ContextOptions options = default);
+        void Detach(IList<TModel> entity, ContextOptions options = default);
+
         Task Save(ContextOptions options = default);
     }
 
     public class Context<TModel, TModelKeyId> : IContext<TModel, TModelKeyId>
-        where TModel : IContextEntity<TModelKeyId>
+        where TModel : class, IContextEntity<TModelKeyId>
         where TModelKeyId : new()
     {
         private static readonly Type ModelKeyIdType = typeof(TModelKeyId);
@@ -79,7 +84,7 @@ namespace ApiTools.Context
         public virtual async Task CreateWithoutSave(IEnumerable<TModel> entities,
             ContextOptions options = default)
         {
-            await _context.AddRangeAsync(entities.Cast<object>());
+            await _context.AddRangeAsync(entities);
         }
 
         /// <summary>
@@ -100,8 +105,10 @@ namespace ApiTools.Context
         public virtual async Task<IEnumerable<TModel>> Create(IEnumerable<TModel> entities,
             ContextOptions options)
         {
+            //TODO: create proxy, instead of returning the actual model
             await CreateWithoutSave(entities, options);
             await Save(options);
+            _context.Attach(entities);
             return entities;
         }
 
@@ -113,10 +120,19 @@ namespace ApiTools.Context
         public virtual async Task<TModel> Create(TModel entity, ContextOptions options = default)
         {
             options = InitiateOptions(options);
+            var dbSet = GetDbSet<TModel>();
+            var proxy = dbSet.CreateProxy();
+
             await _context.AddAsync(entity);
             await Save(options);
-            return entity;
+            Detach(entity);
+            _context.Entry(proxy).CurrentValues.SetValues(entity);
+            _context.Entry(proxy).State = EntityState.Added;
+            _context.Attach(proxy);
+
+            return proxy;
         }
+
 
         /// <summary>
         ///     Finds one entity that matches the same supplied id <code>WHERE id = @id</code>
@@ -282,6 +298,11 @@ namespace ApiTools.Context
             if (entity != null) _context.Entry(entity).State = EntityState.Detached;
         }
 
+        public virtual void Detach(IList<TModel> entities, ContextOptions options = default)
+        {
+            foreach (var entity in entities) _context.Entry(entity).State = EntityState.Detached;
+        }
+
         public virtual async Task Save(ContextOptions options = default)
         {
             await _context.SaveChangesAsync();
@@ -314,6 +335,18 @@ namespace ApiTools.Context
             ContextOptions options = default)
         {
             return await AnyAsync(expressions, options);
+        }
+
+        public virtual async Task<bool> ExistAll(IEnumerable<Expression<Func<TModel, bool>>> expressions,
+            ContextOptions options = default)
+        {
+            if (options != null) options.UseAndInMultipleExpressions = true;
+
+            var expressionsList = expressions.ToList();
+            var query = Find(expressionsList, options);
+            if (query == null) return default;
+            var result = await query.CountAsync();
+            return result == expressionsList.Count;
         }
 
         public virtual IQueryable<TModel> ExistQuery(IEnumerable<Expression<Func<TModel, bool>>> expressions,
@@ -353,8 +386,7 @@ namespace ApiTools.Context
         private static Expression<Func<TModel, bool>> _findByIds(IEnumerable<TModelKeyId> ids,
             ContextOptions options)
         {
-            var listIds = ids.ToList();
-            return x => listIds.Contains(x.Id);
+            return QueryableExtension.FindByIdsExpression<TModelKeyId, TModel>(ids);
             // var isPrimitiveType = ModelKeyIdType.IsPrimitive;
             // if (isPrimitiveType) return ;
 

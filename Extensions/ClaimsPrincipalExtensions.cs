@@ -1,5 +1,7 @@
-﻿﻿using System;
+﻿using System;
 using System.Security.Claims;
+using ApiTools.Models;
+using JetBrains.Annotations;
 
 namespace ApiTools.Extensions
 {
@@ -14,12 +16,13 @@ namespace ApiTools.Extensions
             return Guid.TryParse(id.Value, out var gid) ? gid : Guid.Empty;
         }
 
+        [CanBeNull]
         public static string GetUserRole(this ClaimsPrincipal principal)
         {
             if (principal == null)
                 throw new ArgumentNullException(nameof(principal));
             var role = principal.FindFirst(ClaimTypes.Role);
-            return role?.Value;
+            return role?.Value ?? AuthorizationRoles.Anonymous;
         }
     }
 }

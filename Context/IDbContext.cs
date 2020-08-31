@@ -41,5 +41,10 @@ namespace ApiTools.Context
         public ValueTask<TEntity> FindAsync<TEntity>([CanBeNull] object[] keyValues,
             CancellationToken cancellationToken)
             where TEntity : class;
+
+        public EntityEntry<TEntity> Attach<TEntity>([NotNull] TEntity entity)
+            where TEntity : class;
+
+        public EntityEntry Attach([NotNull] object entity);
     }
 }

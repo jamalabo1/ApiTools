@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Linq;
+using System.Reflection;
+using System.Reflection.Emit;
 using ApiTools.Context;
 using ApiTools.Helpers;
 using ApiTools.Models;
@@ -66,8 +68,20 @@ namespace ApiTools.Startup
             where TModelData : class
         {
             AddDefaultContext<TModel>();
+
+            AddService<TModel, TModelData>(cIServiceType, cServiceType);
+
+            // var serviceMethod = GetType().GetMethods()
+            //     .Single(x => x.Name == nameof(AddDefaultRequirement) && x.GetGenericArguments().Length == 6)
+            //     .MakeGenericMethod(modelType, modelIdType, dataType, serviceType, iServiceHelperType,
+            //         serviceHelperType);
+            // serviceMethod.Invoke(this, new object[0]);
+        }
+
+        public void AddService<TModel, TModelDto>(Type cIServiceType = null, Type cServiceType = null)
+        {
             var modelType = typeof(TModel);
-            var dataType = typeof(TModelData);
+            var dataType = typeof(TModelDto);
             var modelIdType = PropertyHelper.GetModelIdType(modelType);
 
             var serviceType = cServiceType;
@@ -108,13 +122,48 @@ namespace ApiTools.Startup
 
             var iServiceType = typeof(IService<,,>).MakeGenericType(modelType, modelIdType, dataType);
             Services.AddScoped(iServiceType, serviceType);
-            if (cIServiceType != null) Services.AddScoped(cIServiceType, serviceType);
+            if (cIServiceType != null)
+            {
+                var implementedServiceType = serviceType;
+                if (cServiceType == null)
+                {
+                    // get the public fields from the source object
+                    // var sourceFields = serviceType.GetFields();
+                    var assemblyBuilder =
+                        AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("MyDynamicAssembly"),
+                            AssemblyBuilderAccess.Run);
 
-            // var serviceMethod = GetType().GetMethods()
-            //     .Single(x => x.Name == nameof(AddDefaultRequirement) && x.GetGenericArguments().Length == 6)
-            //     .MakeGenericMethod(modelType, modelIdType, dataType, serviceType, iServiceHelperType,
-            //         serviceHelperType);
-            // serviceMethod.Invoke(this, new object[0]);
+                    var moduleBuilder
+                        = assemblyBuilder.DefineDynamicModule("MyDynamicModule");
+
+                    var typeBuilder
+                        = moduleBuilder.DefineType(
+                            "InternalType",
+                            TypeAttributes.Public
+                            | TypeAttributes.Class
+                            | TypeAttributes.AutoClass
+                            | TypeAttributes.AnsiClass
+                            | TypeAttributes.ExplicitLayout,
+                            serviceType);
+
+
+                    typeBuilder.AddInterfaceImplementation(cIServiceType);
+                    typeBuilder.CreatePassThroughConstructors(serviceType);
+
+                    var type = typeBuilder.CreateType();
+
+
+                    Services.AddScoped(cIServiceType, x =>
+                    {
+                        var serviceHelper = x.GetService(iServiceType);
+                        return Activator.CreateInstance(type, serviceHelper);
+                    });
+                }
+                else
+                {
+                    Services.AddScoped(cIServiceType, implementedServiceType);
+                }
+            }
         }
 
 

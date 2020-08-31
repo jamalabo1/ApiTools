@@ -13,7 +13,7 @@ namespace ApiTools.Controllers
 {
     public static class SuperController
     {
-        public static IActionResult GenerateResult<T>(IServiceResponse<T> response)
+        public static IActionResult GenerateResult<T>(IApiResponse<T> response)
         {
             if (response.StatusCode == StatusCodes.Status204NoContent ||
                 !response.Success && response.Response == null && response.Messages.Count == 0)
@@ -24,10 +24,22 @@ namespace ApiTools.Controllers
             };
             return result;
         }
+
+        public static IActionResult GenerateResult(IApiResponse response)
+        {
+            if (response.StatusCode == StatusCodes.Status204NoContent ||
+                !response.Success && response.Messages.Count == 0)
+                return new StatusCodeResult(response.StatusCode);
+            var result = new ObjectResult(response)
+            {
+                StatusCode = response.StatusCode
+            };
+            return result;
+        }
     }
 
     [ApiController]
-    public abstract class
+    public class
         SuperController<TModel, TModelKeyId, TService, TModelDto> : Controller
         where TModel : IBaseDbEntity<TModelKeyId>
         where TService : IService<TModel, TModelKeyId, TModelDto>
@@ -42,14 +54,13 @@ namespace ApiTools.Controllers
         }
 
         protected virtual TService Service { get; }
-        protected virtual IMapper Mapper { get; set; }
-        protected virtual IMapperHelper MapperHelper { get; set; }
+        protected IMapper Mapper { get; set; }
+        protected IMapperHelper MapperHelper { get; set; }
 
-        [CanBeNull]
-        protected IActionResult CheckUserRoles(RouteRules routeRules)
-        {
+        protected IActionResult? CheckUserRoles(RouteRules routeRules, bool allowAnonymous = false)
+        { 
             if (routeRules == null) return StatusCode(StatusCodes.Status404NotFound);
-            if (routeRules.AllowAnonymous) return null;
+            if (routeRules.AllowAnonymous || allowAnonymous) return null;
             if (User == null) return StatusCode(StatusCodes.Status403Forbidden);
             return routeRules.Roles.Any(role => User.IsInRole(role))
                 ? null
@@ -70,13 +81,13 @@ namespace ApiTools.Controllers
         protected virtual IServiceResponse<IEnumerable<TModelDto>> MapDto(
             IServiceResponse<IEnumerable<TModel>> response)
         {
-            return response.ToOtherResponse(MapDto(response.Response));
+            return response.ToOtherServiceResponse(MapDto(response.Response));
         }
 
         private IServiceResponse<PagingServiceResponse<TModelDto>> MapDto(
             IServiceResponse<PagingServiceResponse<TModel>> response)
         {
-            return response.ToOtherResponse(response.Response.ToOtherResponse(MapDto(response.Response.Data)));
+            return response.ToOtherServiceResponse(response.Response.ToOtherResponse(MapDto(response.Response.Data)));
         }
 
 
@@ -168,9 +179,7 @@ namespace ApiTools.Controllers
 
         protected virtual IActionResult GenerateActionResult(IServiceResponse response)
         {
-            if (!response.Success && response.Messages.Count == 0 ||
-                response.StatusCode == StatusCodes.Status204NoContent) return StatusCode(response.StatusCode);
-            return StatusCode(response.StatusCode, response);
+            return SuperController.GenerateResult(response);
         }
 
         protected virtual IActionResult GenerateActionResult<T>(IServiceResponse<T> response)
@@ -299,7 +308,7 @@ namespace ApiTools.Controllers
         [HttpPut]
         [Route("bulk")]
         public virtual async Task<IActionResult> UpdateResources(
-            [FromBody] List<BulkUpdateModel<TModelDto, TModelKeyId>> bulkUpdateModels)
+            [FromBody] List<TModelDto> bulkUpdateModels)
         {
             var rolesResponse = CheckUserRoles(UpdateResources_Roles());
             if (rolesResponse != null) return rolesResponse;
@@ -324,22 +333,17 @@ namespace ApiTools.Controllers
         [HttpPatch("{id}")]
         public virtual async Task<IActionResult> Patch(
             [FromRoute] TModelKeyId id,
-            [FromBody] JsonPatchDocument<TModelDto> dataPatch
+            [FromBody] JsonPatchDocument<TModelDto> patchDoc
         )
         {
             if (Mapper == null) return GenerateActionResult(404, null);
             var rolesResponse = CheckUserRoles(UpdatePartialResource_Roles());
             if (rolesResponse != null) return rolesResponse;
 
-            var response = await Service.Read(id);
-            if (!response.Success) return GenerateActionResult(response);
-            var model = response.Response;
-            dataPatch.ApplyTo(model);
             if (!ModelState.IsValid) return new BadRequestObjectResult(ModelState);
 
-            var updateResponse = await Service.Update(model);
-
-            return GenerateActionResult(updateResponse);
+            var response = await Service.Patch(id, patchDoc);
+            return GenerateActionResult(response);
         }
 
         [HttpPatch("bulk")]
@@ -350,28 +354,10 @@ namespace ApiTools.Controllers
             var rolesResponse = CheckUserRoles(UpdatePartialResource_Roles());
             if (rolesResponse != null) return rolesResponse;
 
-            var response = await Service.Read(patchDocs.Select(x => x.Id));
-            if (!response.Success) return GenerateActionResult(response);
-            var models = response.Response;
-
-            var updateModels = new List<BulkUpdateModel<TModelDto, TModelKeyId>>();
-
-            foreach (var baseDbEntity in models)
-            {
-                var dataPatch = patchDocs.Single(x => x.Id.Equals(baseDbEntity.Id)).JsonPatchDocument;
-                dataPatch.ApplyTo(baseDbEntity);
-                updateModels.Add(new BulkUpdateModel<TModelDto, TModelKeyId>
-                {
-                    Entity = baseDbEntity
-                });
-            }
-
-
             if (!ModelState.IsValid) return new BadRequestObjectResult(ModelState);
 
-            var updateResponse = await Service.Update(updateModels);
-
-            return GenerateActionResult(updateResponse);
+            var response = await Service.Patch(patchDocs);
+            return GenerateActionResult(response);
         }
     }
 }

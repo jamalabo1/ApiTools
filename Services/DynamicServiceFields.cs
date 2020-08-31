@@ -5,6 +5,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Threading.Tasks;
+using ApiTools.Context;
 using ApiTools.Extensions;
 using ApiTools.Helpers;
 using ApiTools.Models;
@@ -14,7 +15,7 @@ using Newtonsoft.Json;
 
 namespace ApiTools.Services
 {
-    public partial class Service<TModel, TModelKeyId, TContext, TModelDto> 
+    public partial class Service<TModel, TModelKeyId, TContext, TModelDto> where TContext : IContext<TModel, TModelKeyId> where TModel : ContextEntity<TModelKeyId> where TModelDto : class, IDtoModel<TModelKeyId>, new() where TModelKeyId : new()
     {
         public async Task<IServiceResponse<object>> Read(string selectField, ServiceOptions<TModel> options = default,
             ContextOptions readOptions = default)

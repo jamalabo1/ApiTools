@@ -2,80 +2,72 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
-using System.Net.Http.Formatting;
 using System.Net.Http.Headers;
 using System.Threading.Tasks;
+using System.Web;
 using ApiTools.Models;
-using Microsoft.AspNetCore.JsonPatch;
+using JetBrains.Annotations;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using RestSharp;
+using RestSharp.Authenticators;
+using RestSharp.Serialization;
+using RestSharp.Serialization.Json;
+using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace ApiTools.AzureServices
 {
     public interface IApiRequestsService
     {
-        Task<IServiceResponse<T>> Post<T>(string path, T data);
-        Task<HttpResponseMessage> Put<T>(string path, T data);
-        Task<HttpResponseMessage> Get(string path);
-        Task<T> Get<T>(string path);
-        Task<HttpResponseMessage> Patch(string path, JsonPatchDocument<dynamic> data);
-        Task<HttpResponseMessage> Patch<T, T2>(string path,
-            IEnumerable<PatchOperation<T, T2>> data) where T : class, IDtoModel<T2>;
+        Task<IServiceResponse<T>> Post<T>(string path, T data) where T : class;
+        Task<HttpResponseMessage> Put<T>(string path, T data) where T : class;
+        Task<HttpResponseMessage> Get(string path, [CanBeNull] object query = null);
+
+        [CanBeNull]
+        Task<T> Get<T>(string path, [CanBeNull] object query = null) where T : class;
+
+        IRestResponse Patch<T>(string path,
+            T data) where T : class;
+
         void SetBearerAuthorizationToken(string authorizationToken);
         void SetAuthorizationToken(string authorizationToken);
-    }
-
-    public static class HttpClientExtension
-    {
-        public static Task<HttpResponseMessage> PatchAsJsonAsync<T>(this HttpClient client, string requestUri, T value)
-        {
-            var content = new ObjectContent<T>(value, new JsonMediaTypeFormatter());
-            var request = new HttpRequestMessage(new HttpMethod("PATCH"), requestUri) {Content = content};
-
-            return client.SendAsync(request);
-        }
     }
 
     public class ApiRequestsService : IApiRequestsService
     {
         private readonly string _apiUrl;
+        private readonly RestClient _client;
         private readonly HttpClient _httpClient;
+
 
         public ApiRequestsService(HttpClient httpClient)
         {
             _httpClient = httpClient;
-            _apiUrl = Environment.GetEnvironmentVariable("API_URL");
+            _apiUrl = Environment.GetEnvironmentVariable("API_URL")!;
+            var client = new RestClient(_apiUrl ?? "");
+            _client = client;
+            _client.UseSerializer<JsonNetSerializer>();
         }
 
 
-        public async Task<IServiceResponse<T>> Post<T>(string path, T data)
+        public async Task<IServiceResponse<T>> Post<T>(string path, T data) where T : class
         {
-            var response = await _httpClient.PostAsJsonAsync(ApiPath(path), data);
+            var response = await _httpClient.PostAsJsonAsync(ApiPath(path, null), data);
             return await response.Content.ReadAsAsync<IServiceResponse<T>>();
-
         }
 
-        public async Task<HttpResponseMessage> Patch(string path, JsonPatchDocument<dynamic> data) 
+        public async Task<HttpResponseMessage> Put<T>(string path, T data) where T : class
         {
-            var response = await _httpClient.PatchAsJsonAsync(ApiPath(path), data);
-            return response;
-        }
-        public async Task<HttpResponseMessage> Patch<T, T2>(string path, IEnumerable<PatchOperation<T, T2>> data) where T : class, IDtoModel<T2>
-        {
-            var response = await _httpClient.PatchAsJsonAsync(ApiPath(path), data);
+            var response = await _httpClient.PutAsJsonAsync(ApiPath(path, null), data);
             return response;
         }
 
-        public async Task<HttpResponseMessage> Put<T>(string path, T data)
-        {
-            var response = await _httpClient.PutAsJsonAsync(ApiPath(path), data);
-            return response;
-        }
-
-        public async Task<HttpResponseMessage> Get(string path)
+        public async Task<HttpResponseMessage> Get(string path, object? query = null)
         {
             try
             {
-                var response = await _httpClient.GetAsync(ApiPath(path));
+                var getPath = ApiPath(path, query);
+                var response = await _httpClient.GetAsync(getPath);
                 return response;
             }
             catch (Exception)
@@ -84,14 +76,16 @@ namespace ApiTools.AzureServices
             }
         }
 
-        public async Task<T> Get<T>(string path)
+        public async Task<T> Get<T>(string path, object? query = null) where T : class
         {
-            var value = await (await Get(path)).Content.ReadAsStringAsync();
-            return string.IsNullOrEmpty(value) ? default : JsonConvert.DeserializeObject<T>(value);
+            var request = await Get(path, query);
+            var value = await request.Content.ReadAsStringAsync();
+            return !string.IsNullOrEmpty(value) ? JsonConvert.DeserializeObject<T>(value) : null;
         }
 
         public void SetBearerAuthorizationToken(string authorizationToken)
         {
+            _client.Authenticator = new JwtAuthenticator(authorizationToken);
             _httpClient.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("Bearer", authorizationToken);
         }
@@ -101,10 +95,98 @@ namespace ApiTools.AzureServices
             SetBearerAuthorizationToken(authorizationToken.Replace("Bearer", "").Trim());
         }
 
-        private string ApiPath(string path)
+
+        private class JsonNetSerializer : IRestSerializer
         {
-            if (path.FirstOrDefault() == '/') return _apiUrl + path;
-            return _apiUrl + "/" + path;
+            public string Serialize(object obj) => 
+                JsonConvert.SerializeObject(obj);
+
+            public string Serialize(Parameter parameter) => 
+                JsonConvert.SerializeObject(parameter.Value);
+
+            public T Deserialize<T>(IRestResponse response) => 
+                JsonConvert.DeserializeObject<T>(response.Content);
+
+            public string[] SupportedContentTypes { get; } =
+            {
+                "application/json", "text/json", "text/x-json", "text/javascript", "*+json"
+            };
+
+            public string ContentType { get; set; } = "application/json";
+
+            public DataFormat DataFormat { get; } = DataFormat.Json;
+        }
+        
+        public IRestResponse Patch<T>(string path, T data) where T : class
+        {
+            // var content = new ObjectContent<string>(JsonConvert.SerializeObject(data), new JsonMediaTypeFormatter());
+            // var apiPath = ApiPath(path);
+            // var response = await _httpClient.PatchAsync(apiPath, content);
+
+            // return response;
+            var resetRequest = new RestRequest(path)
+                .AddJsonBody(data);
+
+            
+            return _client.Patch<T>(resetRequest);
+        }
+
+
+        private string ApiPath(string path, object? query)
+        {
+            string result;
+            if (path.FirstOrDefault() == '/')
+                result = _apiUrl + path;
+            else
+                result = _apiUrl + "/" + path;
+            if (query != null)
+                // var objProperties = query.GetType().GetProperties();
+                // var dict = new Dictionary<string, string>();
+                // foreach (var prop in objProperties)
+                // {
+                //     var objVal = prop.GetValue(query);
+                //     if (prop.PropertyType.IsArray)
+                //     {
+                //         dict.Add(prop.Name, objVal);
+                //        
+                //     }
+                //     else
+                //     {
+                //         var str = objVal?.ToString();
+                //         if (str != null) dict.Add(prop.Name, str);
+                //     }
+                // }
+
+                return $"{result}?{ObjToQueryString(query)}";
+
+            return result;
+        }
+
+        private static string ObjToQueryString(object obj)
+        {
+            var step1 = JsonConvert.SerializeObject(obj);
+
+            var step2 = JsonConvert.DeserializeObject<IDictionary<string, object>>(step1);
+
+            var step3 = step2.SelectMany(x =>
+            {
+                var type = x.Value.GetType();
+                if (type.IsAssignableFrom(typeof(JArray)))
+                {
+                    var arr = (JArray) x.Value;
+                    return arr.Select(e => KeyValue(x.Key, e));
+                }
+
+                return new[] {KeyValue(x.Key, x.Value)};
+            });
+
+            return string.Join("&", step3);
+        }
+
+        private static string KeyValue(string key, object e)
+        {
+            var value = HttpUtility.UrlEncode(e.ToString());
+            return HttpUtility.UrlEncode(key) + "=" + value;
         }
     }
 }

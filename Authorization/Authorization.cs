@@ -5,6 +5,7 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using ApiTools.Extensions;
 using ApiTools.Models;
+using JetBrains.Annotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Infrastructure;
 
@@ -125,7 +126,7 @@ namespace ApiTools.Authorization
 
     public interface IAuthorizationRequirements<in TEntity, TUserId>
     {
-        IAuthorizationRoleRequirement<TEntity, TUserId> this[string index] { get; }
+        IAuthorizationRoleRequirement<TEntity, TUserId> this[[CanBeNull] string index] { get; }
     }
 
     public class AuthorizationRequirements<T, TUserId> : IAuthorizationRequirements<T, TUserId>
@@ -145,6 +146,7 @@ namespace ApiTools.Authorization
         {
             get
             {
+                if (index == null) return null;
                 _requirements.TryGetValue(index, out var value);
                 return value;
             }
@@ -167,7 +169,7 @@ namespace ApiTools.Authorization
         )
         {
             var userRole = context.User.GetUserRole();
-
+            
             var requirements = AuthorizationRequirements();
             if (requirements == null) return;
             var roleRequirements = userRole == null

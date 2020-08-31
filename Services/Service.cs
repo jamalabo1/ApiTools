@@ -4,13 +4,14 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
 using ApiTools.Context;
-using ApiTools.Helpers;
+using ApiTools.Extensions;
 using ApiTools.Models;
 using AutoMapper;
 using AutoMapper.QueryableExtensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Infrastructure;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.EntityFrameworkCore;
 
 namespace ApiTools.Services
@@ -18,7 +19,7 @@ namespace ApiTools.Services
     public interface IService<TModel, TModelKeyId, TModelDto>
         where TModel : IContextEntity<TModelKeyId>
         where TModelKeyId : new()
-        where TModelDto : IDtoModel<TModelKeyId>
+        where TModelDto : class, IDtoModel<TModelKeyId>
     {
         Task<IServiceResponse<TModelDto>> Create(TModel model);
         Task<IServiceResponse<IEnumerable<TModelDto>>> Create(IEnumerable<TModel> models);
@@ -35,15 +36,39 @@ namespace ApiTools.Services
             ContextOptions readOptions = default
         );
 
+        Task<IServiceResponse<IEnumerable<TKeyResult>>> Read<TKeyResult>(
+            Expression<Func<TModel, bool>> expression,
+            Expression<Func<TModel, TKeyResult>> selectExpression,
+            ServiceOptions<TModel> options = default,
+            ContextOptions readOptions = default
+        );
+
         Task<IServiceResponse<TModelDto>> ReadOne(
             Expression<Func<TModel, bool>> expression,
             ServiceOptions<TModel> options = default,
             ContextOptions readOptions = default
         );
 
+        Task<IServiceResponse<PagingServiceResponse<TModelDto>>> ReadPaged(
+            Expression<Func<TModel, bool>> expression,
+            ServiceOptions<TModel> options = default,
+            ContextOptions readOptions = default
+        );
 
         Task<IServiceResponse<IEnumerable<TModelDto>>> Read(
             IEnumerable<TModelKeyId> ids,
+            ServiceOptions<TModel> options = default,
+            ContextOptions readOptions = default
+        );
+
+        Task<IServiceResponse<bool>> Exist(
+            IEnumerable<TModelKeyId> ids,
+            ServiceOptions<TModel> options = default,
+            ContextOptions readOptions = default
+        );
+
+        Task<IServiceResponse<bool>> Exist(
+            Expression<Func<TModel, bool>> expression,
             ServiceOptions<TModel> options = default,
             ContextOptions readOptions = default
         );
@@ -81,6 +106,8 @@ namespace ApiTools.Services
         Task<IServiceResponse> Update(TModel model);
         Task<IServiceResponse> Update(TModelDto model);
 
+        Task<IServiceResponse> Patch(TModelKeyId id, JsonPatchDocument<TModelDto> model);
+        Task<IServiceResponse> Patch(IList<PatchOperation<TModelDto, TModelKeyId>> model);
 
         Task<IServiceResponse<TModelDto>> Create(TModelDto data);
 
@@ -90,14 +117,14 @@ namespace ApiTools.Services
         );
 
         Task<IServiceResponse> Update(TModelKeyId id, TModelDto data);
-        Task<IServiceResponse> Update(IReadOnlyList<BulkUpdateModel<TModelDto, TModelKeyId>> bulkUpdateModels);
+        Task<IServiceResponse> Update(IEnumerable<TModelDto> bulkUpdateModels);
     }
 
-    public abstract partial class
+    public partial class
         Service<TModel, TModelKeyId, TContext, TModelDto> : IService<TModel, TModelKeyId, TModelDto>
         where TContext : IContext<TModel, TModelKeyId>
         where TModel : ContextEntity<TModelKeyId>
-        where TModelDto : class, IDtoModel<TModelKeyId>
+        where TModelDto : class, IDtoModel<TModelKeyId>, new()
         where TModelKeyId : new()
     {
         protected readonly IHttpContextAccessor Accessor;
@@ -108,7 +135,11 @@ namespace ApiTools.Services
         protected readonly IPagingService PagingService;
         protected readonly ISort Sort;
 
-        protected Service(IServiceHelper<TModel, TModelKeyId> serviceHelper)
+        public Service()
+        {
+        }
+
+        public Service(IServiceHelper<TModel, TModelKeyId> serviceHelper)
         {
             Context = (TContext) serviceHelper.Context;
             Authorization = serviceHelper.Authorization;
@@ -139,7 +170,6 @@ namespace ApiTools.Services
             };
         }
 
-
         public virtual async Task<IServiceResponse> Delete(IEnumerable<TModelKeyId> ids)
         {
             var enumerable = ids as TModelKeyId[] ?? ids.ToArray();
@@ -160,11 +190,47 @@ namespace ApiTools.Services
             };
         }
 
+        public async Task<IServiceResponse<bool>> Exist(Expression<Func<TModel, bool>> expression,
+            ServiceOptions<TModel> options = default, ContextOptions readOptions = default)
+        {
+            var query = await ApplyReadOptions(Context.Find(readOptions), options);
+            if (query == null) return IServiceResponse<bool>.Forbidden;
+
+            var exist = await query.AllAsync(expression);
+
+            return new ServiceResponse<bool>
+            {
+                StatusCode = StatusCodes.Status200OK,
+                Response = exist,
+                Success = true
+            };
+        }
+
         public virtual async Task<IServiceResponse<PagingServiceResponse<TModelDto>>> Read(
             ServiceOptions<TModel> options = default,
             ContextOptions readOptions = default)
         {
             var query = await ApplyReadOptions(Context.Find(readOptions), options);
+
+            if (query == null) return IServiceResponse<PagingServiceResponse<TModelDto>>.Forbidden;
+
+            var response = await _readWithPaging(SelectDto(query));
+
+            return new ServiceResponse<PagingServiceResponse<TModelDto>>
+            {
+                Success = true,
+                Response = response,
+                StatusCode = StatusCodes.Status200OK
+            };
+        }
+
+        public async Task<IServiceResponse<PagingServiceResponse<TModelDto>>> ReadPaged(
+            Expression<Func<TModel, bool>> expression,
+            ServiceOptions<TModel> options = default,
+            ContextOptions readOptions = default
+        )
+        {
+            var query = await ApplyReadOptions(Context.Find(expression, readOptions), options);
 
             if (query == null) return IServiceResponse<PagingServiceResponse<TModelDto>>.Forbidden;
 
@@ -221,6 +287,25 @@ namespace ApiTools.Services
             };
         }
 
+        public async Task<IServiceResponse<IEnumerable<TKeyResult>>> Read<TKeyResult>(
+            Expression<Func<TModel, bool>> expression, Expression<Func<TModel, TKeyResult>> selectExpression,
+            ServiceOptions<TModel> options = default,
+            ContextOptions readOptions = default)
+        {
+            var query = await ApplyReadOptions(Context.Find(expression, readOptions), options);
+
+            if (query == null) return IServiceResponse<IEnumerable<TKeyResult>>.Forbidden;
+
+            var model = await query.Select(selectExpression).ToListAsync();
+
+            return new ServiceResponse<IEnumerable<TKeyResult>>
+            {
+                Success = true,
+                Response = model,
+                StatusCode = StatusCodes.Status200OK
+            };
+        }
+
         public async Task<IServiceResponse<TModelDto>> ReadOne(
             Expression<Func<TModel, bool>> expression,
             ServiceOptions<TModel> options = default,
@@ -265,6 +350,24 @@ namespace ApiTools.Services
             };
         }
 
+        public virtual async Task<IServiceResponse<bool>> Exist(IEnumerable<TModelKeyId> ids,
+            ServiceOptions<TModel> options = default, ContextOptions readOptions = default)
+        {
+            var query = await ApplyReadOptions(Context.Find(readOptions), options);
+            if (query == null) return IServiceResponse<bool>.Forbidden;
+
+
+            var exist = await query.AllAsync(QueryableExtension.FindByIdsExpression<TModelKeyId, TModel>(ids));
+
+
+            return new ServiceResponse<bool>
+            {
+                Success = true,
+                Response = exist,
+                StatusCode = StatusCodes.Status200OK
+            };
+        }
+
 
         public virtual async Task<IServiceResponse> Update(TModel data)
         {
@@ -281,11 +384,46 @@ namespace ApiTools.Services
                 StatusCode = StatusCodes.Status204NoContent
             };
         }
+
         public virtual async Task<IServiceResponse> Update(TModelDto data)
         {
             return await Update(Mapper.Map<TModelDto, TModel>(data));
         }
-        
+
+        public async Task<IServiceResponse> Patch(TModelKeyId id, JsonPatchDocument<TModelDto> patchModel)
+        {
+            // Todo: switch and use the (dto->dto)->(model->dto->model))
+            var model = await Context.Find(Context.FindById(id)).SingleOrDefaultAsync();
+            if (model == null) return IServiceResponse.NotFound;
+
+            var dataModel = new TModelDto();
+            patchModel.ApplyTo(dataModel);
+
+            var nData = Mapper.Map(dataModel, model);
+
+            return await Update(Mapper.Map<TModelDto>(nData));
+        }
+
+        public async Task<IServiceResponse> Patch(IList<PatchOperation<TModelDto, TModelKeyId>> patchDocs)
+        {
+            var models = await Context.FindByIds(patchDocs.Select(x => x.Id)).ToListAsync();
+            if (models.Count == 0) return IServiceResponse.NotFound;
+
+            var patchDocsDict = patchDocs.ToDictionary(x => x.Id);
+
+            var nDtos = new List<TModel>();
+            foreach (var model in models)
+            {
+                var dataPatch = patchDocsDict[model.Id].JsonPatchDocument;
+                var nData = Mapper.Map<TModelDto>(model);
+                dataPatch.ApplyTo(nData);
+                nDtos.Add(Mapper.Map(nData, model));
+            }
+
+
+            return await Update(Mapper.Map<IEnumerable<TModelDto>>(nDtos));
+        }
+
 
         public virtual async Task<IServiceResponse> Update(TModelKeyId id, TModelDto data)
         {
@@ -293,7 +431,7 @@ namespace ApiTools.Services
             if (!await AuthorizeUpdate(model)) return IServiceResponse.Forbidden;
 
             var validationResponse = await ValidateData(data, Operations.Update);
-            if (!validationResponse.Success) return validationResponse.ToOtherResponse<TModel>();
+            if (!validationResponse.Success) return validationResponse.ToOtherServiceResponse<TModel>();
 
             var updateModelResponse = await UpdateModel(model, data);
             if (updateModelResponse.Response == null || updateModelResponse.Success == false)
@@ -305,47 +443,6 @@ namespace ApiTools.Services
             var updateRelationResponse = await UpdateRelationData(updateModelResponse, data);
             if (updateRelationResponse.TriggerSave) await Context.Save();
             return updateRelationResponse;
-        }
-
-        public virtual async Task<IServiceResponse> Update(
-            IReadOnlyList<BulkUpdateModel<TModelDto, TModelKeyId>> bulkUpdateModels)
-        {
-            // var modelsReadResponse = await Read(bulkUpdateModels.Select(x => x.Id));
-            // if (!modelsReadResponse.Success) return modelsReadResponse;
-            // var models = modelsReadResponse.Response.ToList();
-            var models = await Context.FindByIds(bulkUpdateModels.Select(x => x.Entity.Id)).ToListAsync();
-
-
-            var validationResponse = await ValidateData(bulkUpdateModels.Select(x => x.Entity), Operations.Update);
-            if (!validationResponse.Success) return validationResponse.ToOtherResponse<TModel>();
-
-            var updateData = new List<(IServiceResponse<TModel>, TModelDto)>();
-            for (var i = 0; i < models.Count; i++)
-            {
-                var model = models[i];
-                var modelData = bulkUpdateModels.FirstOrDefault(x => x.Entity.Id.Equals(model.Id))?.Entity;
-                if (modelData == null) return IServiceResponse.BadRequest;
-                var updateModelResponse = await UpdateModel(model, modelData);
-                if (!updateModelResponse.Success) return updateModelResponse;
-                var updateResponse = await UpdateWithoutSave(updateModelResponse.Response);
-                if (!updateResponse.Success) return updateResponse;
-                updateData.Add((updateModelResponse, modelData));
-
-
-                if ((i + 1) % MaxBulkLimit != 0 && i + 1 != models.Count) continue;
-                // if this phase is complete then add to database, then clear from memory
-                var response = await BulkUpdateOperation(updateData);
-                // if operation has failed then return an error response
-                if (!response.Success) return response;
-                // clear list data
-                updateData.Clear();
-            }
-
-            return new ServiceResponse
-            {
-                Success = true,
-                StatusCode = StatusCodes.Status204NoContent
-            };
         }
 
         public virtual async Task<IServiceResponse<TModelDto>> Create(TModel data)
@@ -383,7 +480,7 @@ namespace ApiTools.Services
             var modelDataList = dataModels.ToList();
 
             var validationResponse = await ValidateData(modelDataList, Operations.Create);
-            if (!validationResponse.Success) return validationResponse.ToOtherResponse<IEnumerable<TModelDto>>();
+            if (!validationResponse.Success) return validationResponse.ToOtherServiceResponse<IEnumerable<TModelDto>>();
 
 
             var entities = new List<TModel>();
@@ -394,7 +491,7 @@ namespace ApiTools.Services
                 var modelData = modelDataList[i];
                 var modelDataResp = await PrepareCreate(modelData);
                 if (!modelDataResp.Success)
-                    return modelDataResp.ToOtherResponse<IEnumerable<TModelDto>>();
+                    return modelDataResp.ToOtherServiceResponse<IEnumerable<TModelDto>>();
                 await Context.CreateWithoutSave(modelDataResp.Response, options?.ContextOptions);
                 data.Add((modelDataResp, modelData));
 
@@ -402,7 +499,7 @@ namespace ApiTools.Services
                 // if this phase is complete then add to database, then clear from memory
                 var response = await BulkCreateOperation(data, entities, options);
                 // if operation has failed then return an error response
-                if (!response.Success) return response.ToOtherResponse<IEnumerable<TModelDto>>();
+                if (!response.Success) return response.ToOtherServiceResponse<IEnumerable<TModelDto>>();
                 // clear list data
                 data.Clear();
             }
@@ -418,14 +515,17 @@ namespace ApiTools.Services
 
         public virtual async Task<IServiceResponse<TModelDto>> Create(TModelDto data)
         {
+            if (!await AuthorizeCreate(data)) return IServiceResponse<TModelDto>.Forbidden;
+            
             var validationResponse = await ValidateData(data, Operations.Create);
-            if (!validationResponse.Success) return validationResponse.ToOtherResponse<TModelDto>();
+            if (!validationResponse.Success) return validationResponse.ToOtherServiceResponse<TModelDto>();
 
             var createModelResp = await CreateModel(data);
-            if (!createModelResp.Success) return createModelResp.ToOtherResponse<TModelDto>();
+            if (!createModelResp.Success) return createModelResp.ToOtherServiceResponse<TModelDto>();
+
 
             var createResponse = await _Create(createModelResp.Response);
-            if (!createResponse.Success) return createResponse.ToOtherResponse<TModelDto>();
+            if (!createResponse.Success) return createResponse.ToOtherServiceResponse<TModelDto>();
 
             var relationCreateResponse = await CreateRelationData(createResponse, data);
             if (relationCreateResponse.TriggerSave) await Context.Save();
@@ -433,15 +533,73 @@ namespace ApiTools.Services
             return MapperHelper.MapDto<TModelDto, TModel>(createResponse);
         }
 
+        public virtual async Task<IServiceResponse> Update(
+            IEnumerable<TModelDto> bulkUpdateModels)
+        {
+            // var modelsReadResponse = await Read(bulkUpdateModels.Select(x => x.Id));
+            // if (!modelsReadResponse.Success) return modelsReadResponse;
+            // var models = modelsReadResponse.Response.ToList();z
+            var models = await Context.FindByIds(bulkUpdateModels.Select(x => x.Id)).ToListAsync();
+
+            var bulkUpdateModelsDict = new Dictionary<TModelKeyId, TModelDto>();
+            foreach (var bulkUpdateModel in bulkUpdateModels)
+                bulkUpdateModelsDict.Add(bulkUpdateModel.Id, bulkUpdateModel);
+
+            var validationResponse = await ValidateData(bulkUpdateModels, Operations.Update);
+            if (!validationResponse.Success) return validationResponse.ToOtherServiceResponse<TModel>();
+
+
+            var updateData = new List<(IServiceResponse<TModel>, TModelDto)>();
+            for (var i = 0; i < models.Count; i++)
+            {
+                var model = models[i];
+                var modelData = bulkUpdateModelsDict[model.Id];
+                if (modelData == null) return IServiceResponse.BadRequest;
+                var updateModelResponse = await UpdateModel(model, modelData);
+                if (!updateModelResponse.Success) return updateModelResponse;
+                var updateResponse = await UpdateWithoutSave(updateModelResponse.Response);
+                if (!updateResponse.Success) return updateResponse;
+                updateData.Add((updateModelResponse, modelData));
+
+
+                if ((i + 1) % MaxBulkLimit != 0 && i + 1 != models.Count) continue;
+                // if this phase is complete then add to database, then clear from memory
+                var response = await BulkUpdateOperation(updateData);
+                // if operation has failed then return an error response
+                if (!response.Success) return response;
+                // clear list data
+                updateData.Clear();
+            }
+
+            return new ServiceResponse
+            {
+                Success = true,
+                StatusCode = StatusCodes.Status204NoContent
+            };
+        }
+
+        protected virtual async Task<IServiceResponse> Update(IEnumerable<TModel> data)
+        {
+            var response = await UpdateWithoutSave(data);
+            if (!response.Success) return response;
+            await Context.Save();
+
+            return new ServiceResponse
+            {
+                Success = true,
+                StatusCode = StatusCodes.Status204NoContent
+            };
+        }
+
         protected virtual IQueryable<TModelDto> SelectDto(IQueryable<TModel> set)
         {
-            return set.ProjectTo<TModelDto>(Mapper.ConfigurationProvider);
+            return set.AsNoTracking().ProjectTo<TModelDto>(Mapper.ConfigurationProvider);
         }
 
 
         public virtual async Task<IServiceResponse<TModel>> _Create(TModel data)
         {
-            if (!await AuthorizeCreate(data)) return IServiceResponse<TModel>.Forbidden;
+            // if (!await AuthorizeCreate(data)) return IServiceResponse<TModel>.Forbidden;
 
             var entity = await Context.Create(data);
             var triggerSave = await PostCreate(entity);
@@ -492,34 +650,53 @@ namespace ApiTools.Services
             return query;
         }
 
-        protected virtual async Task<bool> AuthorizeCreate(TModel data)
+        protected virtual async Task<bool> AuthorizeCreate(TModelDto data)
         {
             return await AuthorizeOperation(data, Operations.Create);
         }
 
-        protected virtual async Task<bool> AuthorizeUpdate(TModel data)
+        protected virtual async Task<bool> AuthorizeCreate(TModel data)
+        {
+            return await AuthorizeOperation(MapDto(data), Operations.Create);
+        }
+
+
+        protected virtual async Task<bool> AuthorizeUpdate(TModelDto data)
         {
             return await AuthorizeOperation(data, Operations.Update);
         }
 
-        protected virtual async Task<bool> AuthorizeDelete(TModel data)
+        protected virtual async Task<bool> AuthorizeUpdate(TModel data)
+        {
+            return await AuthorizeOperation(MapDto(data), Operations.Update);
+        }
+
+        protected virtual async Task<bool> AuthorizeDelete(TModelDto data)
         {
             return await AuthorizeOperation(data, Operations.Delete);
         }
 
-
-        protected virtual async Task<bool> AuthorizeRead(TModel data)
+        protected virtual async Task<bool> AuthorizeDelete(TModel data)
         {
-            return await AuthorizeOperation(data, Operations.Read);
+            return await AuthorizeOperation(MapDto(data), Operations.Delete);
         }
 
         protected virtual async Task<bool> AuthorizeRead(TModelDto data)
         {
-            return await AuthorizeOperation(MapperHelper.MapDto<TModel, TModelDto>(data), Operations.Read);
+            return await AuthorizeOperation(data, Operations.Read);
         }
 
+        protected virtual async Task<bool> AuthorizeRead(TModel data)
+        {
+            return await AuthorizeOperation(MapDto(data), Operations.Read);
+        }
 
-        protected virtual async Task<bool> AuthorizeOperation(TModel data,
+        protected virtual TModelDto MapDto(TModel model)
+        {
+            return Mapper.Map<TModel, TModelDto>(model);
+        }
+
+        protected virtual async Task<bool> AuthorizeOperation(TModelDto data,
             OperationAuthorizationRequirement requirement)
         {
             var authResp =
@@ -529,13 +706,24 @@ namespace ApiTools.Services
 
         protected virtual async Task<IServiceResponse> UpdateWithoutSave(TModel model)
         {
-            if (!await AuthorizeUpdate(model))
-            {
-                Context.Detach(model);
-                return IServiceResponse<TModel>.Forbidden;
-            }
+            // if (!await AuthorizeUpdate(model)) return IServiceResponse<TModel>.Forbidden;
 
             Context.UpdateWithoutSave(model);
+
+            return new ServiceResponse
+            {
+                Success = true,
+                StatusCode = StatusCodes.Status204NoContent
+            };
+        }
+
+        protected virtual async Task<IServiceResponse> UpdateWithoutSave(IEnumerable<TModel> models)
+        {
+            foreach (var model in models)
+                if (!await AuthorizeUpdate(model))
+                    return IServiceResponse<TModel>.Forbidden;
+
+            Context.UpdateWithoutSave(models);
 
             return new ServiceResponse
             {
@@ -604,6 +792,7 @@ namespace ApiTools.Services
             ServiceOptions<TModel> options = default)
         {
             await Context.Save(options?.ContextOptions);
+            Context.Detach(entities);
             var triggerSave = data.Count > 0;
             foreach (var (serviceResponse, modelData) in data)
             {
@@ -617,7 +806,6 @@ namespace ApiTools.Services
 
             if (await PostCreate(entities) || triggerSave) await Context.Save(options?.ContextOptions);
 
-            PropertyHelper.EmptyRelationalData(entities);
             return new ServiceResponse
             {
                 Success = true
@@ -688,7 +876,7 @@ namespace ApiTools.Services
             var createModelResp = await CreateModel(data);
             if (!createModelResp.Success) return createModelResp;
 
-            return !await AuthorizeCreate(createModelResp.Response)
+            return !await AuthorizeCreate(data)
                 ? IServiceResponse<TModel>.Forbidden
                 : createModelResp;
         }

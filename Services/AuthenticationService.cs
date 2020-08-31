@@ -52,7 +52,7 @@ namespace ApiTools.Services
         {
             var validateLoginResponse = await ValidateLogin(context, options);
             if (!validateLoginResponse.Success)
-                return validateLoginResponse.ToOtherResponse<ILoginResponse>();
+                return validateLoginResponse.ToOtherServiceResponse<ILoginResponse>();
 
             var entity = validateLoginResponse.Response;
             var id = keySelector == null ? entity.Id.ToString() : keySelector.Compile().Invoke(entity).ToString();
@@ -79,9 +79,9 @@ namespace ApiTools.Services
                 return new ServiceResponse<TModel>
                 {
                     StatusCode = StatusCodes.Status404NotFound,
-                    Messages = new IServiceResponseMessage[]
+                    Messages = new IApiResponseMessage[]
                     {
-                        new ServiceResponseMessage
+                        new ApiResponseMessage
                         {
                             Code = "authentication.authenticate.not-found",
                             Message = "Account was not found",
@@ -95,16 +95,16 @@ namespace ApiTools.Services
                 foreach (var optionsValidationOption in options.ValidationOptions)
                 {
                     var validationResponse = optionsValidationOption(entity);
-                    if (!validationResponse.Success) return validationResponse.ToOtherResponse<TModel>();
+                    if (!validationResponse.Success) return validationResponse.ToOtherServiceResponse<TModel>();
                 }
 
             if (!_passwordService.ValidatePassword(options.Password, entity.Password))
                 return new ServiceResponse<TModel>
                 {
                     StatusCode = StatusCodes.Status401Unauthorized,
-                    Messages = new IServiceResponseMessage[]
+                    Messages = new IApiResponseMessage[]
                     {
-                        new ServiceResponseMessage
+                        new ApiResponseMessage
                         {
                             Code = "authentication.authenticate.password-mismatch",
                             Message = "The entered password does not match.",

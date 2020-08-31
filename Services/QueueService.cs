@@ -20,7 +20,7 @@ namespace ApiTools.Services
         public QueueService(ITokenService tokenService, IConfiguration configuration)
         {
             _tokenService = tokenService;
-            _azureWebJobsStorage = configuration.GetConnectionString("AzureStorageConnection");
+            _azureWebJobsStorage = configuration.GetConnectionString("AzureWebJobsStorage");
         }
 
         public async Task SetQueue<T>(string referenceName, T data)

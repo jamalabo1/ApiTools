@@ -1,12 +1,8 @@
-﻿using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Text.Json.Serialization;
-using Microsoft.AspNetCore.Http;
-using Newtonsoft.Json;
+﻿using Microsoft.AspNetCore.Http;
 
 namespace ApiTools.Models
 {
-    public interface IServiceResponse
+    public interface IServiceResponse : IApiResponse
     {
         static readonly IServiceResponse Ok = new ServiceResponse
         {
@@ -49,35 +45,17 @@ namespace ApiTools.Models
             StatusCode = StatusCodes.Status500InternalServerError,
             Success = false
         };
-
-        public bool Success { get; set; }
-
         [System.Text.Json.Serialization.JsonIgnore]
+        [Newtonsoft.Json.JsonIgnore]
         public bool TriggerSave { get; set; }
-
-        [JsonPropertyName("status")]
-        [JsonProperty("status")]
-        public int StatusCode { get; set; }
-
-        public IList<IServiceResponseMessage> Messages { get; set; }
-        public IServiceResponse<TO> ToOtherResponse<TO>(TO response = default);
+        IServiceResponse<TO> ToOtherServiceResponse<TO>(TO response = default);
     }
 
-    public class ServiceResponse : IServiceResponse
+    public class ServiceResponse : ApiResponse, IServiceResponse
     {
-        public bool Success { get; set; }
-
-        [System.Text.Json.Serialization.JsonIgnore]
         public bool TriggerSave { get; set; } = true;
 
-        [JsonPropertyName("status")]
-        [JsonProperty("status")]
-        public int StatusCode { get; set; }
-
-        public IList<IServiceResponseMessage> Messages { get; set; } =
-            ImmutableList<IServiceResponseMessage>.Empty;
-
-        public virtual IServiceResponse<TO> ToOtherResponse<TO>(TO response = default)
+        public virtual IServiceResponse<TO> ToOtherServiceResponse<TO>(TO response = default)
         {
             return new ServiceResponse<TO>
             {
@@ -90,30 +68,22 @@ namespace ApiTools.Models
         }
     }
 
-    public interface IServiceResponse<T> : IServiceResponse
+    public interface IServiceResponse<T> : IServiceResponse, IApiResponse<T>
     {
         // public ServiceResponse<TO> ToOtherResponse<TO>();
-        public static readonly IServiceResponse<T> Ok = IServiceResponse.Ok.ToOtherResponse<T>();
-        public static readonly IServiceResponse<T> NoContent = IServiceResponse.NoContent.ToOtherResponse<T>();
-        public static readonly IServiceResponse<T> BadRequest = IServiceResponse.BadRequest.ToOtherResponse<T>();
-        public static readonly IServiceResponse<T> UnAuthorized = IServiceResponse.UnAuthorized.ToOtherResponse<T>();
-        public static readonly IServiceResponse<T> Forbidden = IServiceResponse.Forbidden.ToOtherResponse<T>();
-        public static readonly IServiceResponse<T> NotFound = IServiceResponse.NotFound.ToOtherResponse<T>();
+        static readonly IServiceResponse<T> Ok = IServiceResponse.Ok.ToOtherServiceResponse<T>();
+        static readonly IServiceResponse<T> NoContent = IServiceResponse.NoContent.ToOtherServiceResponse<T>();
+        static readonly IServiceResponse<T> BadRequest = IServiceResponse.BadRequest.ToOtherServiceResponse<T>();
+        static readonly IServiceResponse<T> UnAuthorized = IServiceResponse.UnAuthorized.ToOtherServiceResponse<T>();
+        static readonly IServiceResponse<T> Forbidden = IServiceResponse.Forbidden.ToOtherServiceResponse<T>();
+        static readonly IServiceResponse<T> NotFound = IServiceResponse.NotFound.ToOtherServiceResponse<T>();
 
-        public static readonly IServiceResponse<T> InternalServerError =
-            IServiceResponse.InternalServerError.ToOtherResponse<T>();
-
-        public T Response { get; set; }
+        static readonly IServiceResponse<T> InternalServerError =
+            IServiceResponse.InternalServerError.ToOtherServiceResponse<T>();
     }
 
     public class ServiceResponse<T> : ServiceResponse, IServiceResponse<T>
     {
         public T Response { get; set; }
-
-
-        // public ServiceResponse<TO> ToOtherResponse<TO>()
-        // {
-        //     return base.ToOtherResponse<TO>();
-        // }
     }
 }

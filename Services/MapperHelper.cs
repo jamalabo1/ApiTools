@@ -23,12 +23,12 @@ namespace ApiTools.Services
 
         public virtual IServiceResponse<TDto> MapDto<TDto, T>(IServiceResponse<T> response)
         {
-            return response.ToOtherResponse(MapDto<TDto, T>(response.Response));
+            return response.ToOtherServiceResponse(MapDto<TDto, T>(response.Response));
         }
 
         public virtual IServiceResponse<IEnumerable<TDto>> MapDto<TDto, T>(IServiceResponse<IEnumerable<T>> response)
         {
-            return response.ToOtherResponse(MapDto<IEnumerable<TDto>, IEnumerable<T>>(response.Response));
+            return response.ToOtherServiceResponse(MapDto<IEnumerable<TDto>, IEnumerable<T>>(response.Response));
         }
 
         public TDo MapDto<TDo, T>(T data)
