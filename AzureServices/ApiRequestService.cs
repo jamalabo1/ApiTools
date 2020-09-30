@@ -54,7 +54,7 @@ namespace ApiTools.AzureServices
         {
             var response = await _httpClient.PostAsJsonAsync(ApiPath(path, null), data);
             var str = await response.Content.ReadAsStringAsync();
-            return JsonConvert.DeserializeObject<IServiceResponse<T>>(str);
+            return JsonConvert.DeserializeObject<ServiceResponse<T>>(str);
         }
 
         public async Task<HttpResponseMessage> Put<T>(string path, T data) where T : class
