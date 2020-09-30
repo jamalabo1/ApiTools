@@ -19,7 +19,7 @@ namespace ApiTools.Services
     public interface IService<TModel, TModelKeyId, TModelDto>
         where TModel : IContextEntity<TModelKeyId>
         where TModelKeyId : new()
-        where TModelDto : class, IDtoModel<TModelKeyId>
+        where TModelDto : class, IDtoEntity<TModelKeyId>
     {
         Task<IServiceResponse<TModelDto>> Create(TModel model);
         Task<IServiceResponse<IEnumerable<TModelDto>>> Create(IEnumerable<TModel> models);
@@ -124,7 +124,7 @@ namespace ApiTools.Services
         Service<TModel, TModelKeyId, TContext, TModelDto> : IService<TModel, TModelKeyId, TModelDto>
         where TContext : IContext<TModel, TModelKeyId>
         where TModel : ContextEntity<TModelKeyId>
-        where TModelDto : class, IDtoModel<TModelKeyId>, new()
+        where TModelDto : class, IDtoEntity<TModelKeyId>, new()
         where TModelKeyId : new()
     {
         protected readonly IHttpContextAccessor Accessor;

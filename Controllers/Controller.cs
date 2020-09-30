@@ -44,7 +44,7 @@ namespace ApiTools.Controllers
         where TModel : IBaseDbEntity<TModelKeyId>
         where TService : IService<TModel, TModelKeyId, TModelDto>
         where TModelKeyId : new()
-        where TModelDto : class, IDtoModel<TModelKeyId>
+        where TModelDto : class, IDtoEntity<TModelKeyId>
     {
         public SuperController(IServiceHelper<TModel, TModelKeyId, TModelDto> serviceHelper)
         {

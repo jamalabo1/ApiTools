@@ -44,7 +44,7 @@ namespace ApiTools.Services
                 bool.TryParse(countTotalValue, out _countTotal);
             }
 
-            if (_limit > 1000 || _limit <= 0) _limit = 1000;
+            if (_limit > 10000 || _limit <= 0) _limit = 10000;
             if (_page <= 0) _page = 1;
 
             if (_countTotal)

@@ -82,14 +82,14 @@ namespace ApiTools.Services
 
 
     public interface IServiceHelper<TModel, TModelKeyId, TModelDto> : IServiceHelper<TModel, TModelKeyId>
-        where TModel : IContextEntity<TModelKeyId> where TModelKeyId : new() where TModelDto : class, IDtoModel<TModelKeyId>
+        where TModel : IContextEntity<TModelKeyId> where TModelKeyId : new() where TModelDto : class, IDtoEntity<TModelKeyId>
     {
         IService<TModel, TModelKeyId, TModelDto> Service { get; }
     }
 
     public class ServiceHelper<TModel, TModelKeyId, TModelDto> : ServiceHelper<TModel, TModelKeyId>,
         IServiceHelper<TModel, TModelKeyId, TModelDto>
-        where TModel : IContextEntity<TModelKeyId> where TModelKeyId : new() where TModelDto : class, IDtoModel<TModelKeyId>
+        where TModel : IContextEntity<TModelKeyId> where TModelKeyId : new() where TModelDto : class, IDtoEntity<TModelKeyId>
     {
         public ServiceHelper(IServiceHelper<TModel, TModelKeyId> serviceHelper,
             IService<TModel, TModelKeyId, TModelDto> service) : base(serviceHelper)

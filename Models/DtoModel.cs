@@ -1,11 +1,11 @@
 ﻿namespace ApiTools.Models
 {
-    public interface IDtoModel<TId>
+    public interface IDtoEntity<TId>
     {
         TId Id { get; set; }
     }
 
-    public class DtoModel<TId> : IDtoModel<TId>
+    public class DtoEntity<TId> : IDtoEntity<TId>
     {
         public TId Id { get; set; }
     }

@@ -15,7 +15,7 @@ using Newtonsoft.Json;
 
 namespace ApiTools.Services
 {
-    public partial class Service<TModel, TModelKeyId, TContext, TModelDto> where TContext : IContext<TModel, TModelKeyId> where TModel : ContextEntity<TModelKeyId> where TModelDto : class, IDtoModel<TModelKeyId>, new() where TModelKeyId : new()
+    public partial class Service<TModel, TModelKeyId, TContext, TModelDto> where TContext : IContext<TModel, TModelKeyId> where TModel : ContextEntity<TModelKeyId> where TModelDto : class, IDtoEntity<TModelKeyId>, new() where TModelKeyId : new()
     {
         public async Task<IServiceResponse<object>> Read(string selectField, ServiceOptions<TModel> options = default,
             ContextOptions readOptions = default)
