@@ -190,7 +190,7 @@ namespace ApiTools.Services
             };
         }
 
-        public async Task<IServiceResponse<bool>> Exist(Expression<Func<TModel, bool>> expression,
+        public virtual async Task<IServiceResponse<bool>> Exist(Expression<Func<TModel, bool>> expression,
             ServiceOptions<TModel> options = default, ContextOptions readOptions = default)
         {
             var query = await ApplyReadOptions(Context.Find(readOptions), options);
@@ -224,7 +224,7 @@ namespace ApiTools.Services
             };
         }
 
-        public async Task<IServiceResponse<PagingServiceResponse<TModelDto>>> ReadPaged(
+        public virtual async Task<IServiceResponse<PagingServiceResponse<TModelDto>>> ReadPaged(
             Expression<Func<TModel, bool>> expression,
             ServiceOptions<TModel> options = default,
             ContextOptions readOptions = default
@@ -267,7 +267,7 @@ namespace ApiTools.Services
             };
         }
 
-        public async Task<IServiceResponse<IEnumerable<TModelDto>>> Read(
+        public virtual async Task<IServiceResponse<IEnumerable<TModelDto>>> Read(
             Expression<Func<TModel, bool>> expression,
             ServiceOptions<TModel> options = default,
             ContextOptions readOptions = default
@@ -287,7 +287,7 @@ namespace ApiTools.Services
             };
         }
 
-        public async Task<IServiceResponse<IEnumerable<TKeyResult>>> Read<TKeyResult>(
+        public virtual async Task<IServiceResponse<IEnumerable<TKeyResult>>> Read<TKeyResult>(
             Expression<Func<TModel, bool>> expression, Expression<Func<TModel, TKeyResult>> selectExpression,
             ServiceOptions<TModel> options = default,
             ContextOptions readOptions = default)
@@ -306,7 +306,7 @@ namespace ApiTools.Services
             };
         }
 
-        public async Task<IServiceResponse<TModelDto>> ReadOne(
+        public virtual async Task<IServiceResponse<TModelDto>> ReadOne(
             Expression<Func<TModel, bool>> expression,
             ServiceOptions<TModel> options = default,
             ContextOptions readOptions = default
@@ -390,7 +390,7 @@ namespace ApiTools.Services
             return await Update(Mapper.Map<TModelDto, TModel>(data));
         }
 
-        public async Task<IServiceResponse> Patch(TModelKeyId id, JsonPatchDocument<TModelDto> patchModel)
+        public virtual async Task<IServiceResponse> Patch(TModelKeyId id, JsonPatchDocument<TModelDto> patchModel)
         {
             // Todo: switch and use the (dto->dto)->(model->dto->model))
             var model = await Context.Find(Context.FindById(id)).SingleOrDefaultAsync();
@@ -404,7 +404,7 @@ namespace ApiTools.Services
             return await Update(Mapper.Map<TModelDto>(nData));
         }
 
-        public async Task<IServiceResponse> Patch(IList<PatchOperation<TModelDto, TModelKeyId>> patchDocs)
+        public virtual async Task<IServiceResponse> Patch(IList<PatchOperation<TModelDto, TModelKeyId>> patchDocs)
         {
             var models = await Context.FindByIds(patchDocs.Select(x => x.Id)).ToListAsync();
             if (models.Count == 0) return IServiceResponse.NotFound;
@@ -451,7 +451,7 @@ namespace ApiTools.Services
             return MapperHelper.MapDto<TModelDto, TModel>(response);
         }
 
-        public async Task<IServiceResponse<IEnumerable<TModelDto>>> Create(IEnumerable<TModel> models)
+        public virtual async Task<IServiceResponse<IEnumerable<TModelDto>>> Create(IEnumerable<TModel> models)
         {
             var listModels = models.ToList();
 

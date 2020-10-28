@@ -59,7 +59,7 @@ namespace ApiTools.Services
             var token = _tokenService.GenerateToken(
                 _tokenService.GenerateClaims(id, options.Role)
             );
-            return _resp(token, options.Role, entity.Id);
+            return _resp<TModelId>(token, options.Role, entity);
         }
 
 
@@ -121,13 +121,14 @@ namespace ApiTools.Services
         }
 
 
-        protected virtual ServiceResponse<ILoginResponse> _resp<TModelId>(string token, string role, TModelId accountId)
+        protected virtual IServiceResponse<ILoginResponse> _resp<TModelId>(string token, string role,
+            IBaseAccountDbEntity<TModelId> account) where TModelId : new()
         {
             var resp = new LoginResponse
             {
                 Token = token,
                 Role = role,
-                AccountId = accountId.ToString()
+                AccountId = account.Id.ToString()
             };
             return new ServiceResponse<ILoginResponse>
             {
